@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Bhaina+2:wght@400;500;600;700;800&family=Hind:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700;800&family=Mukta:wght@200;300;400;500;600;700;800&family=Noto+Sans+Odia:wght@400;700;900&family=Noto+Serif+Odia:wght@400;700&family=Outfit:wght@500;700;800;900&family=Playfair+Display:ital,wght@0,500;0,700;1,500;1,700&family=Poppins:wght@300;400;500;600;700;800;900&family=Roboto:wght@300;400;500;700;900&family=Space+Grotesk:wght@500;700;800;900&family=Anek+Odia:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-anek: "Anek Odia", sans-serif;
+  --font-noto-odia: "Noto Sans Odia", sans-serif;
+  --font-noto-serif-odia: "Noto Serif Odia", serif;
+  --font-baloo-odia: "Baloo Bhaina 2", sans-serif;
+  --font-mukta: "Mukta", sans-serif;
+  --font-hind: "Hind", sans-serif;
+  --font-poppins: "Poppins", sans-serif;
+  --font-roboto: "Roboto", sans-serif;
+}
+
+body {
+  background-color: #05060b;
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090a10;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e1b4b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4f46e5;
+}
+

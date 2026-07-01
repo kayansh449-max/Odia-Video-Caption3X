@@ -1,0 +1,6 @@
+{
+  "name": "Odia Auto Caption Maker",
+  "description": "Extract audio from videos, auto-generate captions in Odia, Hindi, and English with viral caption templates, and export SRT, TXT, or MP4 with burned-in captions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
