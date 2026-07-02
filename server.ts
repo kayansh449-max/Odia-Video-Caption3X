@@ -13,6 +13,17 @@ const PORT = 3000;
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
+// Custom CORS middleware to allow cross-origin requests from APK/mobile WebViews
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, x-gemini-api-key");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Initializer for Gemini Client
 function getGeminiClient(customApiKey?: string): GoogleGenAI {
   let apiKey = customApiKey;
@@ -195,9 +206,15 @@ Instructions:
         }
 
         const cleanedText = cleanJsonResponse(responseText);
-        const rawCaptions = JSON.parse(cleanedText);
+        let rawCaptions;
+        try {
+          rawCaptions = JSON.parse(cleanedText);
+        } catch (e) {
+          console.warn("[STT] JSON.parse on global response failed, using manual parse fallback:", e);
+          rawCaptions = tryManualJsonParse(cleanedText);
+        }
 
-        if (!Array.isArray(rawCaptions)) {
+        if (!Array.isArray(rawCaptions) || rawCaptions.length === 0) {
           throw new Error("Gemini response is not a valid subtitles array.");
         }
 
@@ -298,6 +315,61 @@ function cleanJsonResponse(text: string): string {
     }
   }
   return cleaned.trim();
+}
+
+// Fallback robust manual JSON-like parsing for safety
+function tryManualJsonParse(text: string): any[] {
+  const list: any[] = [];
+  // Regex to match JSON-like objects with text, start, and end fields
+  const regex = /\{\s*(?:"text"|'text')\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*(?:"start"|'start')\s*:\s*([0-9.]+)\s*,\s*(?:"end"|'end')\s*:\s*([0-9.]+)\s*\}/gi;
+  
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      let rawText = match[1];
+      if (rawText.startsWith('"') && rawText.endsWith('"')) {
+        rawText = rawText.slice(1, -1);
+      } else if (rawText.startsWith("'") && rawText.endsWith("'")) {
+        rawText = rawText.slice(1, -1);
+      }
+      const start = parseFloat(match[2]);
+      const end = parseFloat(match[3]);
+      if (!isNaN(start) && !isNaN(end)) {
+        list.push({
+          text: rawText.replace(/\\"/g, '"').replace(/\\'/g, "'").trim(),
+          start,
+          end
+        });
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  // If precise regex is unsuccessful, use a looser parser
+  if (list.length === 0) {
+    const looseRegex = /\{([^}]+)\}/g;
+    let looseMatch;
+    while ((looseMatch = looseRegex.exec(text)) !== null) {
+      try {
+        const block = looseMatch[1];
+        const textMatch = /["']text["']\s*:\s*("([^"\\]|\\.)*"|'([^'\\]|\\.)*')/i.exec(block);
+        const startMatch = /["']start["']\s*:\s*([0-9.]+)/i.exec(block);
+        const endMatch = /["']end["']\s*:\s*([0-9.]+)/i.exec(block);
+
+        if (textMatch && startMatch && endMatch) {
+          let t = textMatch[1].slice(1, -1).replace(/\\"/g, '"').replace(/\\'/g, "'").trim();
+          const s = parseFloat(startMatch[1]);
+          const e = parseFloat(endMatch[1]);
+          if (!isNaN(s) && !isNaN(e)) {
+            list.push({ text: t, start: s, end: e });
+          }
+        }
+      } catch (err) {}
+    }
+  }
+
+  return list;
 }
 
 interface CaptionSegment {
@@ -519,7 +591,13 @@ Instructions:
     }
 
     const cleanedText = cleanJsonResponse(textResult);
-    const parsedArray = JSON.parse(cleanedText);
+    let parsedArray;
+    try {
+      parsedArray = JSON.parse(cleanedText);
+    } catch (e) {
+      console.warn(`[STT] JSON.parse on chunk ${idx} response failed, using manual parse fallback:`, e);
+      parsedArray = tryManualJsonParse(cleanedText);
+    }
 
     if (!Array.isArray(parsedArray)) {
       throw new Error(`Invalid JSON array response for chunk ${idx}`);

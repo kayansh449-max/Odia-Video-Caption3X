@@ -897,6 +897,27 @@ export default function App() {
   });
   const [showApiSettings, setShowApiSettings] = useState<boolean>(false);
 
+  // Helper to point relative API endpoints to the live hosted backend when running in APK or other wrappers
+  const resolveApiUrl = (path: string): string => {
+    if ((import.meta as any).env?.DEV) {
+      return path;
+    }
+    const origin = window.location.origin;
+    const isApkOrExternal = !origin || 
+                            origin.startsWith("file://") || 
+                            origin.startsWith("capacitor://") || 
+                            origin.startsWith("app://") || 
+                            origin.includes("localhost") || 
+                            origin === "null" ||
+                            !origin.includes("run.app");
+                            
+    if (isApkOrExternal) {
+      // Directs to the production backend of the application
+      return `https://ais-pre-gcqusul2m4h6tnpmf5vtyf-267455433433.asia-southeast1.run.app${path}`;
+    }
+    return path;
+  };
+
   // Save key to local storage when changed
   useEffect(() => {
     localStorage.setItem("user_gemini_api_key", apiKey);
@@ -916,7 +937,7 @@ export default function App() {
     setTestStatus("testing");
     setTestMessage("");
     try {
-      const response = await fetch("/api/test-key", {
+      const response = await fetch(resolveApiUrl("/api/test-key"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: trimmedKey })
@@ -1053,7 +1074,7 @@ export default function App() {
       setProgressPercent(10); // initial API call delay representation
 
       const trimmedApiKey = apiKey.trim();
-      const response = await fetch("/api/transcribe", {
+      const response = await fetch(resolveApiUrl("/api/transcribe"), {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -1175,7 +1196,7 @@ export default function App() {
       // Generate single speech segment (times are normalized to start at 0.0s for individual playback)
       const normalizedCaption = { ...caption, start: 0, end: caption.end - caption.start, character };
 
-      const response = await fetch("/api/synthesize", {
+      const response = await fetch(resolveApiUrl("/api/synthesize"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1323,7 +1344,7 @@ export default function App() {
     setStandaloneError(null);
 
     try {
-      const response = await fetch("/api/synthesize", {
+      const response = await fetch(resolveApiUrl("/api/synthesize"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1440,7 +1461,7 @@ export default function App() {
         };
       });
 
-      const response = await fetch("/api/synthesize", {
+      const response = await fetch(resolveApiUrl("/api/synthesize"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1592,7 +1613,7 @@ export default function App() {
         text = "नमस्ते! यह एक प्रिव्यू है।";
       }
 
-      const response = await fetch("/api/synthesize", {
+      const response = await fetch(resolveApiUrl("/api/synthesize"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
