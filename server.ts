@@ -1054,24 +1054,21 @@ app.post("/api/transcode", async (req, res) => {
     }
 
     const stat = await fs.promises.stat(tempOutPath);
-    console.log(`[Transcode] Transcoded MP4 successfully of size ${(stat.size / (1024 * 1024)).toFixed(2)} MB. Streaming to client...`);
+    console.log(`[Transcode] Transcoded MP4 successfully of size ${(stat.size / (1024 * 1024)).toFixed(2)} MB.`);
 
-    // Stream the resulting MP4 file back to the browser
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Length", stat.size);
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(outputFilename)}"`);
+    // Clean up only the input WebM file immediately as the output MP4 will be streamed by /api/download-video
+    try {
+      if (fs.existsSync(tempInPath)) {
+        fs.unlinkSync(tempInPath);
+        console.log(`[Transcode] Cleaned up temporary input file: ${tempInPath}`);
+      }
+    } catch (e: any) {
+      console.warn(`[Transcode] Error cleaning up temporary input file ${tempInPath}:`, e.message);
+    }
 
-    const readStream = fs.createReadStream(tempOutPath);
-    readStream.pipe(res);
-
-    readStream.on("end", () => {
-      console.log(`[Transcode] Stream finished. Initiating temp file cleanup...`);
-      cleanupTempFiles(tempFiles);
-    });
-
-    readStream.on("error", (streamErr) => {
-      console.error("[Transcode] ReadStream error:", streamErr);
-      cleanupTempFiles(tempFiles);
+    res.json({
+      success: true,
+      downloadUrl: `/api/download-video?id=output_${randomId}.mp4&name=${encodeURIComponent(outputFilename)}`
     });
 
   } catch (err: any) {
@@ -1079,6 +1076,65 @@ app.post("/api/transcode", async (req, res) => {
     cleanupTempFiles(tempFiles);
     if (!res.headersSent) {
       res.status(500).json({ error: err.message || "Failed to transcode video." });
+    }
+  }
+});
+
+// 3.5 API: Download transcoded MP4 natively via simple HTTP stream (flawless mobile/gallery compatibility)
+app.get("/api/download-video", (req, res) => {
+  const fileId = req.query.id as string;
+  const fileName = req.query.name as string || "video.mp4";
+
+  if (!fileId || typeof fileId !== "string" || fileId.includes("/") || fileId.includes("..")) {
+    return res.status(400).send("Invalid file ID.");
+  }
+
+  const filePath = path.join(os.tmpdir(), fileId);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("Export file has expired or not found. Please click 'Generate & Download' again.");
+  }
+
+  try {
+    const stat = fs.statSync(filePath);
+    
+    // Clean filename for Content-Disposition (safe characters only)
+    let safeFilename = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+    if (!safeFilename.toLowerCase().endsWith(".mp4")) {
+      safeFilename += ".mp4";
+    }
+
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
+
+    readStream.on("end", () => {
+      console.log(`[Download] Finished streaming file ${fileId} to client.`);
+      // Clean up the MP4 from temporary storage 15 seconds after download finishes, 
+      // giving the system plenty of buffer time.
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[Cleanup] Deleted temporary download file ${fileId}`);
+          }
+        } catch (e: any) {
+          console.error("[Cleanup] Error deleting downloaded file:", e.message);
+        }
+      }, 15000);
+    });
+
+    readStream.on("error", (streamErr) => {
+      console.error("[Download] Stream error:", streamErr);
+    });
+
+  } catch (err: any) {
+    console.error("[Download] Endpoint error:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Failed to stream video file.");
     }
   }
 });

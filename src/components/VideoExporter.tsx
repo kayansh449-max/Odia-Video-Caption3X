@@ -402,7 +402,7 @@ export default function VideoExporter({
           console.log("[Export] Sending WebM blob to server for high-compatibility MP4 transcode...");
           
           let cleanBaseName = videoName.trim()
-            ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s]/g, "")
+            ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s\.]/g, "")
             : `odia_viral_captions_${resolution}_${Date.now()}`;
           
           // Force .mp4 at the end so it's a valid video file
@@ -427,8 +427,12 @@ export default function VideoExporter({
             throw new Error(errData.error || "Server-side MP4 transcoding failed.");
           }
 
-          const mp4Blob = await response.blob();
-          const downloadUrl = URL.createObjectURL(mp4Blob);
+          const resData = await response.json();
+          if (!resData.success || !resData.downloadUrl) {
+            throw new Error(resData.error || "Failed to receive transcode download path.");
+          }
+
+          const downloadUrl = resData.downloadUrl;
 
           // Save to state for manual click fallback and future retrieval
           setExportedVideoUrl(downloadUrl);
@@ -451,7 +455,7 @@ export default function VideoExporter({
           
           // Fallback: Directly download the recorded WebM file so user doesn't lose anything
           let cleanFallbackName = videoName.trim()
-            ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s]/g, "")
+            ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s\.]/g, "")
             : `odia_viral_captions_${resolution}_${Date.now()}`;
           
           const fileExt = mimeType.includes("mp4") ? "mp4" : "webm";
