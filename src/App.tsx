@@ -56,6 +56,394 @@ const VOICE_STYLES = [
   { id: "Whispering", label: "Whisper / Soft", labelHindi: "धीमा / कोमल", emoji: "🍃" }
 ];
 
+const VOICE_MAPPING_CLIENT: Record<string, { voiceName: string, promptCue: string }> = {
+  "Male Child": { 
+    voiceName: "Puck", 
+    promptCue: "Speak in a male child's high-pitched, cute, energetic, innocent, and sweet voice." 
+  },
+  "Young Boy": { 
+    voiceName: "Puck", 
+    promptCue: "Speak in a young boy's clear, bright, lively, and active voice." 
+  },
+  "Young Man": { 
+    voiceName: "Fenrir", 
+    promptCue: "Speak in an energetic, confident, crisp young man's voice." 
+  },
+  "Father": { 
+    voiceName: "Fenrir", 
+    promptCue: "Speak in a mature, deep, warm, fatherly, loving, and reassuring voice." 
+  },
+  "Elder Man / Grandfather": { 
+    voiceName: "Charon", 
+    promptCue: "Speak in an older grandfather's slow, wise, gentle, slightly shaky, aged and warm voice." 
+  },
+  "Female Child": { 
+    voiceName: "Kore", 
+    promptCue: "Speak in a sweet little female child's high-pitched, cute, playful, and adorable voice." 
+  },
+  "Young Girl": { 
+    voiceName: "Kore", 
+    promptCue: "Speak in a young girl's bright, friendly, lively, and cheerful voice." 
+  },
+  "Young Woman": { 
+    voiceName: "Zephyr", 
+    promptCue: "Speak in a young woman's elegant, clear, modern, extremely natural, and friendly voice." 
+  },
+  "Mother": { 
+    voiceName: "Zephyr", 
+    promptCue: "Speak in a mother's warm, gentle, caring, compassionate, highly affectionate, and calm voice." 
+  },
+  "Elder Woman / Grandmother": { 
+    voiceName: "Zephyr", 
+    promptCue: "Speak in an older grandmother's slow, gentle, warm, wise, compassionate, and reassuring elder voice." 
+  }
+};
+
+const STYLE_PROMPTS_CLIENT: Record<string, string> = {
+  "Default": "Speak in a natural, neutral, clear narration tone of voice.",
+  "Happy": "Speak with extremely high energy, happiness, excitement, cheerful laughter, and a bright smile in the voice.",
+  "Sad": "Speak in a deeply emotional, crying, weeping, soft, trembling, sad, grieving and heartbroken voice.",
+  "Suspense": "Speak in a quiet, whispering, highly mysterious, thriller, tense, intense, dark, suspenseful and dramatic tone of voice.",
+  "Angry": "Speak with an aggressive, loud, angry, extremely serious, firm, commanding, authoritative and hostile tone of voice.",
+  "Whispering": "Speak in an extremely quiet, soft, whispering, gentle, peaceful, low-volume and calm tone of voice."
+};
+
+function tryManualJsonParseClientSide(text: string): any[] {
+  const list: any[] = [];
+  const regex = /\{\s*(?:"text"|'text')\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*(?:"start"|'start')\s*:\s*([0-9.]+)\s*,\s*(?:"end"|'end')\s*:\s*([0-9.]+)\s*\}/gi;
+  
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    try {
+      let rawText = match[1];
+      if (rawText.startsWith('"') && rawText.endsWith('"')) {
+        rawText = rawText.slice(1, -1);
+      } else if (rawText.startsWith("'") && rawText.endsWith("'")) {
+        rawText = rawText.slice(1, -1);
+      }
+      const start = parseFloat(match[2]);
+      const end = parseFloat(match[3]);
+      if (!isNaN(start) && !isNaN(end)) {
+        list.push({
+          text: rawText.replace(/\\"/g, '"').replace(/\\'/g, "'").trim(),
+          start,
+          end
+        });
+      }
+    } catch (err) {}
+  }
+
+  if (list.length === 0) {
+    const looseRegex = /\{([^}]+)\}/g;
+    let looseMatch;
+    while ((looseMatch = looseRegex.exec(text)) !== null) {
+      try {
+        const block = looseMatch[1];
+        const textMatch = /["']text["']\s*:\s*("([^"\\]|\\.)*"|'([^'\\]|\\.)*')/i.exec(block);
+        const startMatch = /["']start["']\s*:\s*([0-9.]+)/i.exec(block);
+        const endMatch = /["']end["']\s*:\s*([0-9.]+)/i.exec(block);
+
+        if (textMatch && startMatch && endMatch) {
+          let t = textMatch[1].slice(1, -1).replace(/\\"/g, '"').replace(/\\'/g, "'").trim();
+          const s = parseFloat(startMatch[1]);
+          const e = parseFloat(endMatch[1]);
+          if (!isNaN(s) && !isNaN(e)) {
+            list.push({ text: t, start: s, end: e });
+          }
+        }
+      } catch (err) {}
+    }
+  }
+
+  return list;
+}
+
+function encodeWavClientSide(pcmUint8: Uint8Array, sampleRate: number): Uint8Array {
+  const numChannels = 1; // mono
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcmUint8.length;
+  const chunkSize = 36 + dataSize;
+
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, chunkSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  const result = new Uint8Array(44 + dataSize);
+  result.set(new Uint8Array(header), 0);
+  result.set(pcmUint8, 44);
+
+  return result;
+}
+
+async function transcribeAudioClientSide(
+  audioBase64: string,
+  language: string,
+  duration: number,
+  key: string
+): Promise<any[]> {
+  const targetLang = language || "Odia";
+  const durationText = (duration && !isNaN(duration))
+    ? `The total duration of the provided audio file is exactly ${duration.toFixed(2)} seconds. You MUST strictly calibrate and synchronize all start and end timestamps within this 0.0 to ${duration.toFixed(2)} seconds timeline.`
+    : "";
+
+  const promptText = `You are an ultra-precise speech transcription and timing alignment engine.
+Analyze the speech in the provided audio file.
+
+CRITICAL REQUIREMENT:
+${durationText}
+- Define segments based on natural phrases or clauses (approx 3 to 7 words per segment, matching natural speech breath boundaries).
+- The start and end timestamps (in seconds, up to 2 decimal places) for every phrase segment MUST match the EXACT time the speaker starts and ends speaking that phrase in the audio.
+- DO NOT estimate, drift, or delay timings. Listen for the exact vocal onset (when the voice starts speaking the first word) and set the 'start' field to that exact millisecond time, and set 'end' to when the speaker finishes speaking the last word in that phrase.
+- AVOID ACCUMULATIVE DRIFT: Ensure that timestamps do not progressively drift/lag behind the audio over time. Keep timings tightly bound to actual speech audio.
+
+Instructions:
+1. Transcribe the spoken text exactly into the target language requested: "${targetLang}".
+   - If target language is "Odia", write using the Odia script (e.g. "ନମସ୍କାର ବନ୍ଧୁଗଣ, ଆଜିର ଏହି ଭିଡିଓରେ...").
+   - If target language is "Hindi", write using the Hindi Devanagari script (e.g. "नमस्ते दोस्तों, आज के इस वीडियो में...").
+   - If target language is "English", write using clean English.
+2. Segment the transcript into natural speaking phrases of 3 to 7 words each (about 1.5 to 3.5 seconds in duration).
+3. Align each phrase with ultra-precise start and end times in seconds (e.g. start: 1.25, end: 3.82).
+4. Do not include silent parts or background music gaps in segments. The segment must start exactly when the speech begins and pause when there is silence or no speaking.
+5. Ensure absolutely no overlapping segments (i.e. segment N's 'end' must be less than or equal to segment N+1's 'start').
+6. Return the result strictly conforming to the JSON Schema.`;
+
+  const models = ["gemini-1.5-flash", "gemini-2.5-flash"];
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: "audio/wav",
+                    data: audioBase64
+                  }
+                },
+                {
+                  text: promptText
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "ARRAY",
+              description: "An array of subtitles with start/end times and captions",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  text: { type: "STRING" },
+                  start: { type: "NUMBER" },
+                  end: { type: "NUMBER" }
+                },
+                required: ["text", "start", "end"]
+              }
+            }
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Google API returned status ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textResult) {
+        throw new Error("No transcription text returned from Gemini.");
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(textResult.trim());
+      } catch (err) {
+        parsed = tryManualJsonParseClientSide(textResult);
+      }
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    } catch (err: any) {
+      console.warn(`Direct transcription with ${model} failed, trying next...`, err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Transcription failed on Google API client side.");
+}
+
+async function synthesizeSpeechClientSide(
+  captions: any[],
+  voiceAssignments: any,
+  defaultVoice: string,
+  selectedVoiceStyle: string,
+  selectedLanguage: string,
+  key: string
+): Promise<{ success: boolean; audioBase64: string; totalDuration: number }> {
+  const getVoiceConfig = (caption: any) => {
+    let voiceCategory = defaultVoice || "Young Woman";
+    if (caption.character && voiceAssignments && voiceAssignments[caption.character]) {
+      voiceCategory = voiceAssignments[caption.character];
+    }
+    return VOICE_MAPPING_CLIENT[voiceCategory] || VOICE_MAPPING_CLIENT["Young Woman"];
+  };
+
+  const targetLang = selectedLanguage || "Odia";
+
+  const synthesisPromises = captions.map(async (caption: any, index: number) => {
+    let cleanText = caption.text;
+    const colonIndex = cleanText.indexOf(":");
+    if (colonIndex !== -1 && colonIndex < 15) {
+      cleanText = cleanText.substring(colonIndex + 1).trim();
+    }
+
+    const voiceConf = getVoiceConfig(caption);
+    const currentStyle = caption.style || selectedVoiceStyle || "Default";
+    const styleInstruction = STYLE_PROMPTS_CLIENT[currentStyle] || STYLE_PROMPTS_CLIENT["Default"];
+
+    let langPronunciation = "";
+    if (targetLang === "Odia") {
+      langPronunciation = `Read the following Odia text (written in the Odia script) with natural, flawless Odia pronunciation: "${cleanText}"\nRequested Style/Emotion: ${styleInstruction}`;
+    } else if (targetLang === "Hindi") {
+      langPronunciation = `Read the following Hindi text (written in the Devanagari script) with natural, flawless Hindi pronunciation: "${cleanText}"\nRequested Style/Emotion: ${styleInstruction}`;
+    } else {
+      langPronunciation = `Read the following English text with natural, fluent English pronunciation: "${cleanText}"\nRequested Style/Emotion: ${styleInstruction}`;
+    }
+
+    const promptPart = `${voiceConf.promptCue}\n${langPronunciation}\nIMPORTANT: Strictly capture and output the tone/emotion of ${currentStyle} exactly with appropriate emotional pauses and vocal inflections.`;
+
+    try {
+      const model = "gemini-2.5-flash";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptPart }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voiceConf.voiceName }
+              }
+            }
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Google TTS API returned status ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const base64Audio = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!base64Audio) {
+        throw new Error("Empty audio track returned from Google Gemini TTS API.");
+      }
+
+      const binaryString = atob(base64Audio);
+      const buffer = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        buffer[i] = binaryString.charCodeAt(i);
+      }
+
+      const duration = buffer.length / 48000;
+
+      return {
+        index,
+        start: parseFloat(caption.start),
+        end: parseFloat(caption.end),
+        buffer,
+        duration,
+        success: true
+      };
+    } catch (err: any) {
+      console.error(`[TTS Client side] [Segment ${index}] Failed:`, err);
+      const duration = Math.max(0.5, parseFloat(caption.end) - parseFloat(caption.start));
+      const silenceBuffer = new Uint8Array(Math.ceil(duration * 24000) * 2);
+      return {
+        index,
+        start: parseFloat(caption.start),
+        end: parseFloat(caption.end),
+        buffer: silenceBuffer,
+        duration,
+        success: false,
+        error: err.message
+      };
+    }
+  });
+
+  const results = await Promise.all(synthesisPromises);
+
+  let maxEndTime = 0;
+  results.forEach(res => {
+    const endPos = res.start + res.duration;
+    if (endPos > maxEndTime) {
+      maxEndTime = endPos;
+    }
+  });
+
+  if (maxEndTime <= 0) maxEndTime = 5;
+
+  const finalPcmBuffer = new Uint8Array(Math.ceil(maxEndTime * 24000) * 2);
+
+  results.forEach(res => {
+    const startSampleOffset = Math.round(res.start * 24000);
+    const startByteOffset = startSampleOffset * 2;
+
+    if (startByteOffset < finalPcmBuffer.length) {
+      const bytesToWrite = Math.min(res.buffer.length, finalPcmBuffer.length - startByteOffset);
+      finalPcmBuffer.set(res.buffer.subarray(0, bytesToWrite), startByteOffset);
+    }
+  });
+
+  const wavUint8 = encodeWavClientSide(finalPcmBuffer, 24000);
+
+  let binary = "";
+  const len = wavUint8.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(wavUint8[i]);
+  }
+  const base64Wav = btoa(binary);
+
+  return {
+    success: true,
+    audioBase64: base64Wav,
+    totalDuration: maxEndTime
+  };
+}
+
 export default function App() {
   // App States
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -896,6 +1284,7 @@ export default function App() {
     return localStorage.getItem("user_gemini_api_key") || "";
   });
   const [showApiSettings, setShowApiSettings] = useState<boolean>(false);
+  const [showApiKeyPlain, setShowApiKeyPlain] = useState<boolean>(false);
 
   // Helper to point relative API endpoints to the live hosted backend when running in APK or other wrappers
   const resolveApiUrl = (path: string): string => {
@@ -937,13 +1326,37 @@ export default function App() {
     setTestStatus("testing");
     setTestMessage("");
     try {
-      const response = await fetch(resolveApiUrl("/api/test-key"), {
+      // Direct client-side verification to Google Gemini API
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${trimmedKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: "Hello, reply with YES" }] }]
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.candidates && data.candidates.length > 0) {
+          setTestStatus("success");
+          setTestMessage("✓ Key Connected Successfully! (एपीआई की सफलतापूर्वक जुड़ गई है!)");
+          setApiKey(trimmedKey);
+          localStorage.setItem("user_gemini_api_key", trimmedKey);
+          setIsSimulated(false);
+          setApiErrorDetail("");
+          return;
+        }
+      }
+
+      // If direct call fails (e.g. CORS, but Gemini REST API allows CORS), fallback to backend
+      console.warn("Direct verification unsuccessful or returned non-ok status, trying backend verification fallback...");
+      const backendResponse = await fetch(resolveApiUrl("/api/test-key"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: trimmedKey })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
+      const data = await backendResponse.json();
+      if (backendResponse.ok && data.success) {
         setTestStatus("success");
         setTestMessage(data.message || "Connected successfully! (सफलतापूर्वक जुड़ गया है!)");
         setApiKey(trimmedKey);
@@ -956,7 +1369,7 @@ export default function App() {
       }
     } catch (err: any) {
       setTestStatus("error");
-      setTestMessage(err.message || "Failed to reach server. (सर्वर तक पहुंचने में विफल।)");
+      setTestMessage(err.message || "Failed to reach server or Google Gemini API. (कनेक्शन विफल।)");
     }
   };
   
@@ -1074,35 +1487,56 @@ export default function App() {
       setProgressPercent(10); // initial API call delay representation
 
       const trimmedApiKey = apiKey.trim();
-      const response = await fetch(resolveApiUrl("/api/transcribe"), {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          ...(trimmedApiKey ? { "x-gemini-api-key": trimmedApiKey } : {})
-        },
-        body: JSON.stringify({
-          audio: base64,
-          language: selectedLanguage,
-          duration: audioDuration,
-          apiKey: trimmedApiKey || undefined
-        })
-      });
+      let captionsResult = null;
+      let usedClientSide = false;
 
-      if (!response.ok) {
-        throw new Error("Transcriber API returned an error status");
+      if (trimmedApiKey) {
+        try {
+          console.log("[STT] Custom API Key detected. Transcribing directly via client-side Google Gemini API...");
+          captionsResult = await transcribeAudioClientSide(base64, selectedLanguage, audioDuration, trimmedApiKey);
+          usedClientSide = true;
+          setIsSimulated(false);
+          setApiErrorDetail("");
+        } catch (clientErr: any) {
+          console.warn("[STT] Client-side direct transcription failed, falling back to server-side transcription...", clientErr);
+        }
       }
 
-      const result = await response.json();
-      
-      if (result.success && result.captions) {
-        setCaptions(result.captions);
-        const sim = result.simulation || false;
-        setIsSimulated(sim);
-        if (sim) {
-          setApiErrorDetail(result.errorDetail || "Running in demo simulation mode.");
+      if (!usedClientSide) {
+        const response = await fetch(resolveApiUrl("/api/transcribe"), {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            ...(trimmedApiKey ? { "x-gemini-api-key": trimmedApiKey } : {})
+          },
+          body: JSON.stringify({
+            audio: base64,
+            language: selectedLanguage,
+            duration: audioDuration,
+            apiKey: trimmedApiKey || undefined
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("Transcriber API returned an error status");
         }
-      } else {
-        throw new Error(result.error || "Failed to generate captions");
+
+        const result = await response.json();
+        
+        if (result.success && result.captions) {
+          captionsResult = result.captions;
+          const sim = result.simulation || false;
+          setIsSimulated(sim);
+          if (sim) {
+            setApiErrorDetail(result.errorDetail || "Running in demo simulation mode.");
+          }
+        } else {
+          throw new Error(result.error || "Failed to generate captions");
+        }
+      }
+
+      if (captionsResult) {
+        setCaptions(captionsResult);
       }
 
     } catch (err: any) {
@@ -1196,28 +1630,53 @@ export default function App() {
       // Generate single speech segment (times are normalized to start at 0.0s for individual playback)
       const normalizedCaption = { ...caption, start: 0, end: caption.end - caption.start, character };
 
-      const response = await fetch(resolveApiUrl("/api/synthesize"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-gemini-api-key": apiKey.trim() || localStorage.getItem("user_gemini_api_key") || ""
-        },
-        body: JSON.stringify({
-          captions: [normalizedCaption],
-          voiceAssignments,
-          defaultVoice,
-          style: selectedVoiceStyle,
-          language: selectedLanguage,
-          apiKey: apiKey.trim() || undefined
-        })
-      });
+      const trimmedApiKey = apiKey.trim() || localStorage.getItem("user_gemini_api_key") || "";
+      let base64Audio = "";
+      let usedClientSide = false;
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to synthesize speech segment.");
+      if (trimmedApiKey) {
+        try {
+          console.log("[TTS] Custom API Key detected. Synthesizing single segment directly via client-side Google Gemini API...");
+          const clientRes = await synthesizeSpeechClientSide(
+            [normalizedCaption],
+            voiceAssignments,
+            defaultVoice,
+            selectedVoiceStyle,
+            selectedLanguage,
+            trimmedApiKey
+          );
+          if (clientRes && clientRes.success) {
+            base64Audio = clientRes.audioBase64;
+            usedClientSide = true;
+          }
+        } catch (clientErr: any) {
+          console.warn("[TTS] Client-side single synthesis failed, falling back to server-side...", clientErr);
+        }
       }
 
-      const base64Audio = data.audioBase64;
+      if (!usedClientSide) {
+        const response = await fetch(resolveApiUrl("/api/synthesize"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-gemini-api-key": trimmedApiKey
+          },
+          body: JSON.stringify({
+            captions: [normalizedCaption],
+            voiceAssignments,
+            defaultVoice,
+            style: selectedVoiceStyle,
+            language: selectedLanguage,
+            apiKey: trimmedApiKey || undefined
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to synthesize speech segment.");
+        }
+        base64Audio = data.audioBase64;
+      }
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
@@ -1344,29 +1803,53 @@ export default function App() {
     setStandaloneError(null);
 
     try {
-      const response = await fetch(resolveApiUrl("/api/synthesize"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-gemini-api-key": apiKey.trim() || localStorage.getItem("user_gemini_api_key") || ""
-        },
-        body: JSON.stringify({
-          captions: [{ text: standaloneText, start: 0, end: 5.0 }],
-          voiceAssignments: {},
-          defaultVoice: standaloneVoice,
-          style: selectedVoiceStyle,
-          language: selectedLanguage,
-          apiKey: apiKey.trim() || undefined
-        })
-      });
+      const trimmedApiKey = apiKey.trim() || localStorage.getItem("user_gemini_api_key") || "";
+      let base64Audio = "";
+      let usedClientSide = false;
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to synthesize speech.");
+      if (trimmedApiKey) {
+        try {
+          console.log("[TTS] Custom API Key detected. Synthesizing standalone voice directly via client-side Google Gemini API...");
+          const clientRes = await synthesizeSpeechClientSide(
+            [{ text: standaloneText, start: 0, end: 5.0 }],
+            {},
+            standaloneVoice,
+            selectedVoiceStyle,
+            selectedLanguage,
+            trimmedApiKey
+          );
+          if (clientRes && clientRes.success) {
+            base64Audio = clientRes.audioBase64;
+            usedClientSide = true;
+          }
+        } catch (clientErr: any) {
+          console.warn("[TTS] Client-side standalone synthesis failed, falling back to server-side...", clientErr);
+        }
       }
 
-      // Convert base64 audio to binary blob URL
-      const base64Audio = data.audioBase64;
+      if (!usedClientSide) {
+        const response = await fetch(resolveApiUrl("/api/synthesize"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-gemini-api-key": trimmedApiKey
+          },
+          body: JSON.stringify({
+            captions: [{ text: standaloneText, start: 0, end: 5.0 }],
+            voiceAssignments: {},
+            defaultVoice: standaloneVoice,
+            style: selectedVoiceStyle,
+            language: selectedLanguage,
+            apiKey: trimmedApiKey || undefined
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to synthesize speech.");
+        }
+        base64Audio = data.audioBase64;
+      }
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
@@ -1461,29 +1944,53 @@ export default function App() {
         };
       });
 
-      const response = await fetch(resolveApiUrl("/api/synthesize"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-gemini-api-key": apiKey.trim() || localStorage.getItem("user_gemini_api_key") || ""
-        },
-        body: JSON.stringify({
-          captions: captionsWithCharacters,
-          voiceAssignments,
-          defaultVoice,
-          style: selectedVoiceStyle,
-          language: selectedLanguage,
-          apiKey: apiKey.trim() || undefined
-        })
-      });
+      const trimmedApiKey = apiKey.trim() || localStorage.getItem("user_gemini_api_key") || "";
+      let base64Audio = "";
+      let usedClientSide = false;
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to synthesize speech.");
+      if (trimmedApiKey) {
+        try {
+          console.log("[TTS] Custom API Key detected. Synthesizing full composite voice directly via client-side Google Gemini API...");
+          const clientRes = await synthesizeSpeechClientSide(
+            captionsWithCharacters,
+            voiceAssignments,
+            defaultVoice,
+            selectedVoiceStyle,
+            selectedLanguage,
+            trimmedApiKey
+          );
+          if (clientRes && clientRes.success) {
+            base64Audio = clientRes.audioBase64;
+            usedClientSide = true;
+          }
+        } catch (clientErr: any) {
+          console.warn("[TTS] Client-side composite synthesis failed, falling back to server-side...", clientErr);
+        }
       }
 
-      // Convert base64 audio to binary blob URL
-      const base64Audio = data.audioBase64;
+      if (!usedClientSide) {
+        const response = await fetch(resolveApiUrl("/api/synthesize"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-gemini-api-key": trimmedApiKey
+          },
+          body: JSON.stringify({
+            captions: captionsWithCharacters,
+            voiceAssignments,
+            defaultVoice,
+            style: selectedVoiceStyle,
+            language: selectedLanguage,
+            apiKey: trimmedApiKey || undefined
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to synthesize speech.");
+        }
+        base64Audio = data.audioBase64;
+      }
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
@@ -1613,28 +2120,53 @@ export default function App() {
         text = "नमस्ते! यह एक प्रिव्यू है।";
       }
 
-      const response = await fetch(resolveApiUrl("/api/synthesize"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-gemini-api-key": apiKey.trim() || localStorage.getItem("user_gemini_api_key") || ""
-        },
-        body: JSON.stringify({
-          captions: [{ text, start: 0, end: 1.5 }],
-          voiceAssignments: {},
-          defaultVoice: voiceCategory,
-          style: selectedVoiceStyle,
-          language: selectedLanguage,
-          apiKey: apiKey.trim() || undefined
-        })
-      });
+      const trimmedApiKey = apiKey.trim() || localStorage.getItem("user_gemini_api_key") || "";
+      let base64Audio = "";
+      let usedClientSide = false;
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to generate preview.");
+      if (trimmedApiKey) {
+        try {
+          console.log("[TTS] Custom API Key detected. Previewing voice directly via client-side Google Gemini API...");
+          const clientRes = await synthesizeSpeechClientSide(
+            [{ text, start: 0, end: 1.5 }],
+            {},
+            voiceCategory,
+            selectedVoiceStyle,
+            selectedLanguage,
+            trimmedApiKey
+          );
+          if (clientRes && clientRes.success) {
+            base64Audio = clientRes.audioBase64;
+            usedClientSide = true;
+          }
+        } catch (clientErr: any) {
+          console.warn("[TTS] Client-side voice preview failed, falling back to server-side...", clientErr);
+        }
       }
 
-      const base64Audio = data.audioBase64;
+      if (!usedClientSide) {
+        const response = await fetch(resolveApiUrl("/api/synthesize"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-gemini-api-key": trimmedApiKey
+          },
+          body: JSON.stringify({
+            captions: [{ text, start: 0, end: 1.5 }],
+            voiceAssignments: {},
+            defaultVoice: voiceCategory,
+            style: selectedVoiceStyle,
+            language: selectedLanguage,
+            apiKey: trimmedApiKey || undefined
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to generate preview.");
+        }
+        base64Audio = data.audioBase64;
+      }
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
@@ -2242,7 +2774,7 @@ export default function App() {
             )}
 
             {/* Right Side: Sticky WYSIWYG Video Editor (Compact layout on mobile, premium sticky sidebar on desktop) */}
-            <section className={`col-span-1 lg:col-span-5 lg:order-2 ${videoUrl ? "sticky top-[68px] lg:top-24 z-40 bg-slate-950/95 backdrop-blur-md py-2 px-1 lg:p-0 rounded-2xl shadow-xl lg:shadow-none" : "lg:sticky lg:top-24"} self-start flex flex-col gap-4`}>
+            <section className={`col-span-1 lg:col-span-5 lg:order-2 ${videoUrl && !showApiSettings ? "sticky top-[68px] lg:top-24 z-40 bg-slate-950/95 backdrop-blur-md py-2 px-1 lg:p-0 rounded-2xl shadow-xl lg:shadow-none" : "lg:sticky lg:top-24"} self-start flex flex-col gap-4`}>
           {/* 1. Upload Deck */}
           {!videoUrl ? (
             <div 
@@ -2527,59 +3059,120 @@ export default function App() {
             </div>
 
             {/* API Key settings panel */}
-            <div className="border border-slate-800/80 bg-slate-950/40 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
+            <div className="border border-slate-800/80 bg-slate-950/40 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <button 
                   type="button"
-                  onClick={() => setShowApiSettings(!showApiSettings)}
+                  onClick={() => setShowApiSettings(true)}
                   className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-indigo-400 transition cursor-pointer"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>Gemini API Key Settings (🔑 {apiKey ? "Configured" : "Not Set - Click to Configure"})</span>
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-400 shrink-0 animate-pulse" />
+                  <span>Gemini API Key: {apiKey ? "🔑 Configured (सेव है)" : "❌ Not Set (क्लिक करके जोड़ें)"}</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowApiSettings(!showApiSettings)}
-                  className="text-[10px] text-indigo-400 hover:underline font-mono"
+                  onClick={() => setShowApiSettings(true)}
+                  className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 text-[10px] font-extrabold py-1 px-3 rounded-xl border border-indigo-500/20 transition cursor-pointer"
                 >
-                  {showApiSettings ? "Hide" : "Show / Change"}
+                  {apiKey ? "Change Key" : "Add Key / जोड़ें"}
                 </button>
               </div>
+              <p className="text-[10px] text-slate-500 leading-normal">
+                {apiKey 
+                  ? "✓ Your custom API key is stored securely in your browser's local storage for your APK." 
+                  : "⚠ Running in Simulated mode. Click 'Add Key' above to insert your own Gemini key for permanent usage on Amazon Appstore/APK."}
+              </p>
+            </div>
 
-              {showApiSettings && (
-                <div className="space-y-3 pt-1 border-t border-slate-800/40 text-xs text-slate-400">
-                  <p className="leading-relaxed text-[11px]">
-                    <strong>How to Add API Key (ऐपीआई की कैसे जोड़ें?):</strong>
-                    <br />
-                    1. Get a free Gemini key from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-pink-400 underline hover:text-pink-300">Google AI Studio</a>.
-                    <br />
-                    2. Paste it in the input box below. We store it locally &amp; securely in your browser's local storage.
-                    <br />
-                    3. Or configure it as an environment variable named <code className="text-pink-300 bg-pink-500/15 px-1 py-0.5 rounded text-[10px]">GEMINI_API_KEY</code> in the <strong>Settings &gt; Secrets</strong> menu on top.
-                  </p>
+            {/* API Key Settings Modal Overlay */}
+            {showApiSettings && (
+              <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 bg-slate-950/90 backdrop-blur-lg overflow-y-auto">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl relative my-4 sm:my-auto space-y-4 animate-fadeIn">
                   
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      placeholder="Paste your AI Studio GEMINI_API_KEY here..."
-                      value={apiKey}
-                      onChange={(e) => {
-                        setApiKey(e.target.value);
-                        setTestStatus("idle");
-                        setTestMessage("");
-                      }}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-                    />
-                    {apiKey && (
-                      <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          onClick={testApiKey}
-                          disabled={testStatus === "testing"}
-                          className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 px-3 py-2 rounded-xl border border-indigo-500/30 transition text-xs font-bold disabled:opacity-50 cursor-pointer"
-                        >
-                          {testStatus === "testing" ? "Testing..." : "Test Key"}
-                        </button>
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-yellow-400" />
+                      <h3 className="text-sm font-black text-white uppercase tracking-wider">Gemini API Configurator</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowApiSettings(false)}
+                      className="text-slate-400 hover:text-white transition p-1.5 rounded-xl hover:bg-slate-800 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Modal Guide */}
+                  <div className="space-y-3 text-xs text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-2xl border border-slate-850">
+                    <p className="font-bold text-slate-200">
+                      🔑 Add Key for Permanent APK Use (APK के लिए एपीआई की जोड़ें):
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      If you publish this APK on Amazon or other stores, this custom API Key ensures that transcription and voice translation features continue working perfectly for all your users.
+                    </p>
+                    <div className="text-[11px] text-slate-400 space-y-1">
+                      <p>
+                        1. Get a free API key from <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-pink-400 font-extrabold underline hover:text-pink-300">Google AI Studio</a>.
+                      </p>
+                      <p>
+                        2. Paste the key in the field below. It is saved in local storage.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Input field wrapper */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                      Enter Gemini API Key
+                    </label>
+                    <div className="relative flex items-center bg-slate-950 border border-slate-800 focus-within:border-indigo-500 rounded-xl overflow-hidden px-3">
+                      <input
+                        type={showApiKeyPlain ? "text" : "password"}
+                        placeholder="AIzaSy..."
+                        value={apiKey}
+                        onChange={(e) => {
+                          setApiKey(e.target.value);
+                          setTestStatus("idle");
+                          setTestMessage("");
+                        }}
+                        className="flex-1 bg-transparent py-2.5 text-[12px] text-slate-100 focus:outline-none font-mono"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKeyPlain(!showApiKeyPlain)}
+                        className="text-slate-400 hover:text-slate-200 px-1 text-xs font-semibold cursor-pointer"
+                        title={showApiKeyPlain ? "Hide password" : "Show password"}
+                      >
+                        {showApiKeyPlain ? "👁️ Hide" : "🔒 Show"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions & Status inside Modal */}
+                  <div className="space-y-3">
+                    <div className="flex gap-2.5">
+                      <button
+                        type="button"
+                        onClick={testApiKey}
+                        disabled={testStatus === "testing" || !apiKey.trim()}
+                        className="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 disabled:opacity-40 text-white py-2.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/15"
+                      >
+                        {testStatus === "testing" ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Testing Key...</span>
+                          </>
+                        ) : (
+                          <span>⚡ Test API Connection</span>
+                        )}
+                      </button>
+
+                      {apiKey && (
                         <button
                           type="button"
                           onClick={() => {
@@ -2587,46 +3180,46 @@ export default function App() {
                             setTestStatus("idle");
                             setTestMessage("");
                           }}
-                          className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-2 rounded-xl border border-red-500/20 transition text-xs font-bold cursor-pointer"
+                          className="bg-slate-850 hover:bg-slate-800 text-red-400 px-4 py-2.5 rounded-xl border border-slate-800 transition text-xs font-bold cursor-pointer"
                         >
                           Clear
                         </button>
+                      )}
+                    </div>
+
+                    {/* Test Status feedback */}
+                    {testStatus !== "idle" && (
+                      <div className={`p-3 rounded-xl border text-[11px] font-mono leading-relaxed ${
+                        testStatus === "success" 
+                          ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" 
+                          : testStatus === "error" 
+                          ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
+                          : "bg-indigo-500/10 border-indigo-500/25 text-indigo-400 animate-pulse"
+                      }`}>
+                        <div className="font-bold mb-0.5">
+                          {testStatus === "success" && "✓ Connection Success (कनेक्शन सफल):"}
+                          {testStatus === "error" && "✗ Connection Failed (कनेक्शन विफल):"}
+                          {testStatus === "testing" && "⚡ Connecting..."}
+                        </div>
+                        <p className="text-[10px] opacity-90 leading-normal">{testMessage}</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Test Connection Output Status */}
-                  {testStatus !== "idle" && (
-                    <div className={`p-2.5 rounded-xl border text-[11px] font-mono leading-relaxed ${
-                      testStatus === "success" 
-                        ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" 
-                        : testStatus === "error" 
-                        ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
-                        : "bg-indigo-500/10 border-indigo-500/25 text-indigo-400 animate-pulse"
-                    }`}>
-                      <div className="font-bold mb-0.5">
-                        {testStatus === "success" && "✓ Key Connected (एपीआई की काम कर रही है):"}
-                        {testStatus === "error" && "✗ Connection Error (कनेक्शन एरर):"}
-                        {testStatus === "testing" && "⚡ Connecting to Google Gemini API..."}
-                      </div>
-                      <p className="text-[10px] opacity-90">{testMessage}</p>
-                    </div>
-                  )}
+                  {/* Close & Save Button */}
+                  <div className="border-t border-slate-800/80 pt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowApiSettings(false)}
+                      className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-extrabold text-xs py-2.5 px-6 rounded-xl transition shadow-lg shadow-pink-600/15 cursor-pointer"
+                    >
+                      Save &amp; Close Settings
+                    </button>
+                  </div>
 
-                  {apiKey ? (
-                    testStatus !== "success" && (
-                      <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-                        ✓ API key entered. Click "Test Key" above to verify stability.
-                      </p>
-                    )
-                  ) : (
-                    <p className="text-[10px] text-amber-400/80 italic">
-                      ⚠ No custom API Key entered. Using smart simulation mode.
-                    </p>
-                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Generate Action Button */}
             <button
