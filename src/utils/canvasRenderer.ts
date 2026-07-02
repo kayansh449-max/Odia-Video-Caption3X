@@ -106,6 +106,16 @@ export function drawCaptionOnCanvas({
     animScale = 1 + 0.08 * Math.sin(currentTime * 12);
   }
 
+  // Pre-split the text into natural landscape lines (4-7 words per line max)
+  const words = text.split(/\s+/).filter(Boolean);
+  const splitLimit = 6;
+  const useTwoLines = words.length > splitLimit;
+  const line1Words = useTwoLines ? words.slice(0, Math.ceil(words.length / 2)) : words;
+  const line2Words = useTwoLines ? words.slice(Math.ceil(words.length / 2)) : [];
+
+  const line1Text = line1Words.join(" ");
+  const line2Text = line2Words.join(" ");
+
   switch (templateId) {
     case 'simple-white': {
       // Classic subtitle with translucent backing
@@ -116,175 +126,260 @@ export function drawCaptionOnCanvas({
 
       const paddingX = 16 * scale;
       const paddingY = 8 * scale;
+      const lineGap = 6 * scale;
 
-      const textMetrics = ctx.measureText(text);
-      const textWidth = textMetrics.width;
-      const textHeight = fontSize;
+      const w1 = ctx.measureText(line1Text).width;
+      const w2 = useTwoLines ? ctx.measureText(line2Text).width : 0;
+      const rectWidth = Math.max(w1, w2) + paddingX * 2;
+      const rectHeight = useTwoLines ? (fontSize * 2 + lineGap) + paddingY * 2 : fontSize + paddingY * 2;
 
-      const rectWidth = textWidth + paddingX * 2;
-      const rectHeight = textHeight + paddingY * 2;
       const rectX = posX - rectWidth / 2;
       const rectY = posY - rectHeight / 2;
 
-      // Draw background box
-      ctx.fillStyle = getBgColor(0, 0, 0, 0.55);
+      // Draw background box with sleek premium shadows
+      ctx.fillStyle = getBgColor(0, 0, 0, 0.75); // premium higher contrast backing
       ctx.beginPath();
-      ctx.roundRect(rectX, rectY, rectWidth, rectHeight, 6 * scale);
+      ctx.roundRect(rectX, rectY, rectWidth, rectHeight, 8 * scale);
       ctx.fill();
 
-      // Draw text
+      // Sleek subtle border
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      ctx.lineWidth = 1 * scale;
+      ctx.stroke();
+
+      // Draw text lines
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(text, posX, posY);
+      if (useTwoLines) {
+        ctx.fillText(line1Text, posX, posY - fontSize / 2 - lineGap / 4);
+        ctx.fillText(line2Text, posX, posY + fontSize / 2 + lineGap / 4);
+      } else {
+        ctx.fillText(line1Text, posX, posY);
+      }
       break;
     }
 
     case 'viral-shorts': {
       // Bold yellow/white uppercase text with heavy black stroke
-      const fontSize = Math.round(28 * scale);
-      ctx.font = `900 ${fontSize}px "JetBrains Mono", "Impact", "Anek Odia", sans-serif`;
+      const fontSize = Math.round(26 * scale);
+      ctx.font = `900 ${fontSize}px "Space Grotesk", "Impact", "Anek Odia", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      const cleanText = text.toUpperCase();
+      const cleanLine1 = line1Text.toUpperCase();
+      const cleanLine2 = line2Text.toUpperCase();
 
       ctx.translate(posX, posY);
       ctx.scale(animScale, animScale);
 
-      // Text background highlight box
-      const metrics = ctx.measureText(cleanText);
-      const boxW = metrics.width + 24 * scale;
-      const boxH = fontSize + 16 * scale;
+      const w1 = ctx.measureText(cleanLine1).width;
+      const w2 = useTwoLines ? ctx.measureText(cleanLine2).width : 0;
+      const boxW = Math.max(w1, w2) + 24 * scale;
+      const lineGap = 10 * scale;
+      const boxH = useTwoLines ? (fontSize * 2 + lineGap) + 20 * scale : fontSize + 20 * scale;
 
-      ctx.fillStyle = getBgColor(0, 0, 0, 1.0);
+      // Premium glassmorphism / dark backing
+      ctx.fillStyle = getBgColor(5, 5, 10, 0.95);
       ctx.beginPath();
-      ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 10 * scale);
+      ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 12 * scale);
       ctx.fill();
 
-      // Border for box
-      ctx.strokeStyle = getBorderColor(250, 204, 21, 1.0); // yellow-400
-      ctx.lineWidth = 3.5 * scale;
+      // Vibrant premium gradient border
+      ctx.strokeStyle = getBorderColor(236, 72, 153, 0.85); // elegant hot pink-500
+      ctx.lineWidth = 2.5 * scale;
       ctx.stroke();
 
-      // Draw outline text
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 6 * scale;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(cleanText, 0, 0);
+      // Draw shadow first
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 8 * scale;
+      ctx.shadowOffsetX = 3 * scale;
+      ctx.shadowOffsetY = 3 * scale;
 
-      // Draw solid text
-      ctx.fillStyle = '#facc15'; // yellow-400
-      ctx.fillText(cleanText, 0, 0);
+      const drawStrokeAndFill = (txt: string, yOffset: number, fillCol: string) => {
+        // Draw black outline
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6 * scale;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(txt, 0, yOffset);
+
+        // Draw solid text
+        ctx.fillStyle = fillCol;
+        ctx.fillText(txt, 0, yOffset);
+      };
+
+      if (useTwoLines) {
+        drawStrokeAndFill(cleanLine1, -fontSize / 2 - lineGap / 4, '#ffffff'); // Line 1 white
+        drawStrokeAndFill(cleanLine2, fontSize / 2 + lineGap / 4, '#facc15'); // Line 2 vibrant yellow
+      } else {
+        drawStrokeAndFill(cleanLine1, 0, '#facc15');
+      }
       break;
     }
 
     case 'mrbeast-style': {
       // Rotated colorful text with heavy shadow and bounce
-      const fontSize = Math.round(34 * scale);
-      ctx.font = `900 ${fontSize}px "Space Grotesk", "Anek Odia", "Arial Black", sans-serif`;
+      const fontSize = Math.round(30 * scale);
+      ctx.font = `900 ${fontSize}px "Space Grotesk", "Impact", "Anek Odia", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const cleanText = text.toUpperCase();
+      const cleanLine1 = line1Text.toUpperCase();
+      const cleanLine2 = line2Text.toUpperCase();
 
       ctx.translate(posX, posY);
-      ctx.rotate(-3 * Math.PI / 180); // Rotate -3 degrees
+      ctx.rotate(-2.5 * Math.PI / 180); // Rotate -2.5 degrees for that organic viral vibe
       ctx.scale(animScale, animScale);
 
-      // Measure text
-      const metrics = ctx.measureText(cleanText);
-      const padding = 18 * scale;
-      
-      // Draw background outline card shadow
-      ctx.fillStyle = getBgColor(0, 0, 0, 1.0);
-      ctx.beginPath();
-      ctx.roundRect(-metrics.width / 2 - padding, -fontSize / 2 - padding / 2 + 4 * scale, metrics.width + padding * 2, fontSize + padding, 12 * scale);
-      ctx.fill();
+      const lineGap = 12 * scale;
 
-      // Draw primary yellow/orange card
-      ctx.fillStyle = getBgColor(245, 158, 11, 1.0);
-      ctx.beginPath();
-      ctx.roundRect(-metrics.width / 2 - padding, -fontSize / 2 - padding / 2, metrics.width + padding * 2, fontSize + padding, 12 * scale);
-      ctx.fill();
-      
-      ctx.strokeStyle = getBorderColor(0, 0, 0, 1.0);
-      ctx.lineWidth = 4 * scale;
-      ctx.stroke();
+      const drawBeastLine = (txt: string, yOffset: number) => {
+        const lineWords = txt.split(/\s+/).filter(Boolean);
+        const wordMetrics = lineWords.map(w => ctx.measureText(w).width);
+        const spaceW = ctx.measureText(" ").width;
+        const totalW = wordMetrics.reduce((sum, w) => sum + w, 0) + spaceW * (lineWords.length - 1);
+        
+        let curX = -totalW / 2;
 
-      // Text Stroke
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 8 * scale;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(cleanText, 0, 1 * scale);
+        // Longest word of the entire text is highlighted
+        const globalWords = (cleanLine1 + " " + cleanLine2).trim().split(/\s+/).filter(Boolean);
+        const longestWord = [...globalWords].sort((a, b) => b.length - a.length)[0];
 
-      // Text Fill
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(cleanText, 0, 1 * scale);
+        lineWords.forEach((word, idx) => {
+          const isHighlighted = word === longestWord && globalWords.length > 1;
+          const wordW = wordMetrics[idx];
+          const wordCenterX = curX + wordW / 2;
+
+          ctx.save();
+          ctx.translate(wordCenterX, yOffset);
+
+          // Give a very subtle extra scale to the highlighted word
+          if (isHighlighted) {
+            ctx.scale(1.1, 1.1);
+          }
+
+          // 1. Draw heavy black outline first
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 8 * scale;
+          ctx.lineJoin = 'round';
+          
+          // Draw a solid black 3D drop shadow by rendering the outline shifted
+          ctx.strokeText(word, 3 * scale, 3 * scale);
+          ctx.strokeText(word, 0, 0);
+
+          // 2. Draw solid black shift text for 3D effect
+          ctx.fillStyle = '#000000';
+          ctx.fillText(word, 3 * scale, 3 * scale);
+
+          // 3. Draw primary colored text
+          if (isHighlighted) {
+            ctx.fillStyle = '#22c55e'; // Vibrant Green-500
+          } else if (idx % 2 === 0) {
+            ctx.fillStyle = '#ffffff'; // White
+          } else {
+            ctx.fillStyle = '#facc15'; // Bright Yellow-400
+          }
+          ctx.fillText(word, 0, 0);
+
+          ctx.restore();
+          curX += wordW + spaceW;
+        });
+      };
+
+      if (useTwoLines) {
+        drawBeastLine(cleanLine1, -fontSize / 2 - lineGap / 4);
+        drawBeastLine(cleanLine2, fontSize / 2 + lineGap / 4);
+      } else {
+        drawBeastLine(cleanLine1, 0);
+      }
       break;
     }
 
     case 'emotional-story': {
       // Serif italic delicate font
-      const fontSize = Math.round(20 * scale);
+      const fontSize = Math.round(19 * scale);
       ctx.font = `italic 500 ${fontSize}px "Playfair Display", "Noto Sans Odia", serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
+      const lineGap = 8 * scale;
+
       // Soft white/cream glowing drop shadow
-      ctx.shadowColor = 'rgba(253, 246, 227, 0.4)';
-      ctx.shadowBlur = 8 * scale;
+      ctx.shadowColor = 'rgba(253, 246, 227, 0.35)';
+      ctx.shadowBlur = 10 * scale;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
 
-      // Simple dark drop shadow for reading
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillText(text, posX + 1.5 * scale, posY + 1.5 * scale);
+      const drawEmotionalText = (txt: string, yOffset: number, isAccent: boolean) => {
+        // Simple dark drop shadow for reading
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 4 * scale;
+        ctx.shadowOffsetX = 1.5 * scale;
+        ctx.shadowOffsetY = 1.5 * scale;
+        ctx.fillStyle = isAccent ? '#fef3c7' : '#ffffff'; // amber-100 or solid white
+        ctx.fillText(txt, 0, yOffset);
+        ctx.restore();
+      };
 
-      ctx.fillStyle = '#fef3c7'; // amber-100
-      ctx.fillText(text, posX, posY);
+      ctx.translate(posX, posY);
+
+      if (useTwoLines) {
+        drawEmotionalText(line1Text, -fontSize / 2 - lineGap / 4, false);
+        drawEmotionalText(line2Text, fontSize / 2 + lineGap / 4, true);
+      } else {
+        drawEmotionalText(line1Text, 0, true);
+      }
       break;
     }
 
     case 'reels-trending': {
       // Cyan pill badge at bottom
-      const fontSize = Math.round(22 * scale);
+      const fontSize = Math.round(20 * scale);
       ctx.font = `800 ${fontSize}px "Outfit", "Anek Odia", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const cleanText = text.toUpperCase();
-      const py = 10 * scale;
-      const px = 22 * scale;
+      const cleanLine1 = line1Text.toUpperCase();
+      const cleanLine2 = line2Text.toUpperCase();
+      const py = 12 * scale;
+      const px = 24 * scale;
+      const lineGap = 8 * scale;
 
-      const metrics = ctx.measureText(cleanText);
-      const pillW = metrics.width + px * 2;
-      const pillH = fontSize + py * 2;
+      const w1 = ctx.measureText(cleanLine1).width;
+      const w2 = useTwoLines ? ctx.measureText(cleanLine2).width : 0;
+      const pillW = Math.max(w1, w2) + px * 2;
+      const pillH = useTwoLines ? (fontSize * 2 + lineGap) + py * 2 : fontSize + py * 2;
+
       const pillX = posX - pillW / 2;
       const pillY = posY - pillH / 2;
 
       // Draw neon glow pill background
-      ctx.shadowColor = 'rgba(34, 211, 238, 0.6)'; // cyan neon
-      ctx.shadowBlur = 12 * scale;
+      ctx.shadowColor = 'rgba(34, 211, 238, 0.55)'; // cyan neon glow
+      ctx.shadowBlur = 14 * scale;
       
-      ctx.fillStyle = getBgColor(2, 6, 23, 0.85); // slate-950/85
+      ctx.fillStyle = getBgColor(3, 7, 26, 0.9); // modern deep cyber navy
       ctx.beginPath();
-      ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2); // Capsule
+      ctx.roundRect(pillX, pillY, pillW, pillH, 16 * scale); // Capsule with rounded corners
       ctx.fill();
 
       // Draw neon cyan border
       ctx.shadowBlur = 0; // Reset shadow for outline
-      ctx.strokeStyle = getBorderColor(34, 211, 238, 0.7);
+      ctx.strokeStyle = getBorderColor(34, 211, 238, 0.75);
       ctx.lineWidth = 2 * scale;
       ctx.stroke();
 
-      // Render cyan text
       ctx.fillStyle = '#67e8f9'; // cyan-300
-      ctx.fillText(cleanText, posX, posY);
+      if (useTwoLines) {
+        ctx.fillText(cleanLine1, posX, posY - fontSize / 2 - lineGap / 4);
+        ctx.fillText(cleanLine2, posX, posY + fontSize / 2 + lineGap / 4);
+      } else {
+        ctx.fillText(cleanLine1, posX, posY);
+      }
       break;
     }
 
     case 'viral-highlights': {
       // Important word highlighted in bright neon green/pink, others white!
-      const fontSize = Math.round(32 * scale);
+      const fontSize = Math.round(26 * scale);
       ctx.font = `900 ${fontSize}px "Outfit", "Anek Odia", "Arial Black", sans-serif`;
       ctx.textAlign = 'left'; // Left text baseline alignment for word-by-word drawing
       ctx.textBaseline = 'middle';
@@ -292,80 +387,104 @@ export function drawCaptionOnCanvas({
       ctx.translate(posX, posY);
       ctx.scale(animScale, animScale);
 
-      const words = text.split(/\s+/);
-      const wordMetrics = words.map(w => ctx.measureText(w).width);
-      const spaceWidth = ctx.measureText(" ").width;
-      const totalW = wordMetrics.reduce((a, b) => a + b, 0) + spaceWidth * (words.length - 1);
-      
-      // Since textAlign is 'left', offset our starting position to make it center-aligned overall
-      let currentX = -totalW / 2;
+      const lineGap = 12 * scale;
 
-      // Find the longest word to highlight as "important"
-      const longestWord = [...words].sort((a, b) => b.length - a.length)[0];
+      const globalWords = (line1Text + " " + line2Text).trim().split(/\s+/).filter(Boolean);
+      const longestWord = [...globalWords].sort((a, b) => b.length - a.length)[0];
 
-      words.forEach((word, idx) => {
-        const isHighlighted = word === longestWord && words.length > 1;
+      const drawHighlightLine = (txt: string, yOffset: number) => {
+        const lineWords = txt.split(/\s+/).filter(Boolean);
+        const wordMetrics = lineWords.map(w => ctx.measureText(w).width);
+        const spaceWidth = ctx.measureText(" ").width;
+        const totalW = wordMetrics.reduce((sum, w) => sum + w, 0) + spaceWidth * (lineWords.length - 1);
+        
+        let currentX = -totalW / 2;
 
-        // Draw shadow/stroke first
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 6 * scale;
-        ctx.lineJoin = 'round';
-        ctx.strokeText(word, currentX, 0);
+        lineWords.forEach((word, idx) => {
+          const isHighlighted = word === longestWord && globalWords.length > 1;
 
-        // Word Fill
-        if (isHighlighted) {
-          ctx.fillStyle = '#22c55e'; // neon green-500
-        } else if (idx % 2 === 0) {
-          ctx.fillStyle = '#ffffff'; // standard white
-        } else {
-          ctx.fillStyle = '#facc15'; // yellow-400 alternate accent
-        }
+          ctx.save();
+          ctx.translate(currentX + wordMetrics[idx] / 2, yOffset);
 
-        ctx.fillText(word, currentX, 0);
-        currentX += wordMetrics[idx] + spaceWidth;
-      });
+          // Draw outline first
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 6 * scale;
+          ctx.lineJoin = 'round';
+          ctx.strokeText(word, 0, 0);
+
+          // Word Fill
+          if (isHighlighted) {
+            ctx.fillStyle = '#22c55e'; // Neon Green
+          } else if (idx % 2 === 0) {
+            ctx.fillStyle = '#ffffff'; // White
+          } else {
+            ctx.fillStyle = '#ec4899'; // Vibrant Hot Pink-500
+          }
+
+          ctx.textAlign = 'center';
+          ctx.fillText(word, 0, 0);
+          ctx.restore();
+
+          currentX += wordMetrics[idx] + spaceWidth;
+        });
+      };
+
+      if (useTwoLines) {
+        drawHighlightLine(line1Text, -fontSize / 2 - lineGap / 4);
+        drawHighlightLine(line2Text, fontSize / 2 + lineGap / 4);
+      } else {
+        drawHighlightLine(line1Text, 0);
+      }
       break;
     }
 
     case 'emoji-fusion': {
       // Beautiful text badge with corresponding emoji appended gracefully
-      const fontSize = Math.round(22 * scale);
+      const fontSize = Math.round(20 * scale);
       ctx.font = `800 ${fontSize}px "Outfit", "Noto Sans Odia", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      // Find matching emoji
       const emoji = getEmojiForText(text);
-      const displayText = `${text} ${emoji}`;
-
+      
+      const lineGap = 10 * scale;
       const py = 12 * scale;
       const px = 24 * scale;
 
-      const metrics = ctx.measureText(displayText);
-      const pillW = metrics.width + px * 2;
-      const pillH = fontSize + py * 2;
+      const w1 = ctx.measureText(line1Text).width;
+      const w2 = useTwoLines ? ctx.measureText(line2Text).width : 0;
+      const maxTextW = Math.max(w1, w2);
+      
+      const emojiW = ctx.measureText(" " + emoji).width;
+      const pillW = maxTextW + emojiW + px * 2;
+      const pillH = useTwoLines ? (fontSize * 2 + lineGap) + py * 2 : fontSize + py * 2;
+
       const pillX = posX - pillW / 2;
       const pillY = posY - pillH / 2;
 
-      // Dual shadow/glow
-      ctx.shadowColor = 'rgba(236, 72, 153, 0.5)'; // Hot pink glow
-      ctx.shadowBlur = 16 * scale;
+      // Pinkish/Violet neon glow
+      ctx.shadowColor = 'rgba(236, 72, 153, 0.45)';
+      ctx.shadowBlur = 15 * scale;
 
-      // Dark background card
-      ctx.fillStyle = getBgColor(15, 12, 30, 0.9); // rich purple-dark
+      // Dark violet gradient card background
+      ctx.fillStyle = getBgColor(12, 8, 28, 0.95);
       ctx.beginPath();
       ctx.roundRect(pillX, pillY, pillW, pillH, 16 * scale);
       ctx.fill();
 
-      // Pinkish/Violet gradient border
+      // Hot pink glowing border
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = getBorderColor(236, 72, 153, 1.0); // hot pink border
-      ctx.lineWidth = 2.5 * scale;
+      ctx.strokeStyle = getBorderColor(236, 72, 153, 0.85);
+      ctx.lineWidth = 2 * scale;
       ctx.stroke();
 
-      // Glowing text
-      ctx.fillStyle = '#fef08a'; // yellow-200
-      ctx.fillText(displayText, posX, posY);
+      ctx.fillStyle = '#fef08a'; // yellow-200 for glowing reading contrast
+      if (useTwoLines) {
+        ctx.fillText(line1Text, posX - emojiW / 2, posY - fontSize / 2 - lineGap / 4);
+        ctx.fillText(line2Text + " " + emoji, posX + (maxTextW - w2) / 2 - emojiW / 2, posY + fontSize / 2 + lineGap / 4);
+      } else {
+        ctx.fillText(line1Text + " " + emoji, posX, posY);
+      }
       break;
     }
 
@@ -375,7 +494,6 @@ export function drawCaptionOnCanvas({
       ctx.font = `900 ${fontSize}px "Outfit", "Noto Sans Odia", sans-serif`;
       ctx.textBaseline = 'middle';
 
-      const words = text.split(/\s+/);
       const totalDuration = (end || 0) - (start || 0) || 2.5;
       const elapsed = currentTime - (start || 0);
       const wordDuration = totalDuration / Math.max(1, words.length);
@@ -384,18 +502,12 @@ export function drawCaptionOnCanvas({
         Math.max(0, Math.floor(elapsed / wordDuration))
       );
 
-      // Split words into 2 lines if we have 10-12 words to keep it readable and fit the screen
-      const splitLimit = 6;
-      const useTwoLines = words.length > splitLimit;
-      const line1Words = useTwoLines ? words.slice(0, Math.ceil(words.length / 2)) : words;
-      const line2Words = useTwoLines ? words.slice(Math.ceil(words.length / 2)) : [];
-
       // Calculate sizes to draw the background capsule
       const spaceW = ctx.measureText(" ").width;
 
-      const getLineWidthAndMetrics = (lineWords: string[]) => {
-        const metrics = lineWords.map(w => ctx.measureText(w).width);
-        const totalW = metrics.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
+      const getLineWidthAndMetrics = (lineWordsList: string[]) => {
+        const metrics = lineWordsList.map(w => ctx.measureText(w).width);
+        const totalW = metrics.reduce((a, b) => a + b, 0) + spaceW * (lineWordsList.length - 1);
         return { totalW, metrics };
       };
 
@@ -424,11 +536,11 @@ export function drawCaptionOnCanvas({
       ctx.stroke();
 
       // Render words function
-      const drawWordLine = (lineWords: string[], wordMetrics: number[], startY: number, wordStartIndex: number) => {
-        const lineTotalW = wordMetrics.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
+      const drawWordLine = (lineWordsList: string[], wordMetrics: number[], startY: number, wordStartIndex: number) => {
+        const lineTotalW = wordMetrics.reduce((a, b) => a + b, 0) + spaceW * (lineWordsList.length - 1);
         let curX = posX - lineTotalW / 2;
 
-        lineWords.forEach((word, index) => {
+        lineWordsList.forEach((word, index) => {
           const originalIndex = wordStartIndex + index;
           const isActive = originalIndex === activeWordIndex;
 

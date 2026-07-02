@@ -798,6 +798,7 @@ export default function App() {
       WebkitTextStroke: settings.outlineWidth > 0 
         ? `${settings.outlineWidth}px ${settings.outlineColor}` 
         : "none",
+      whiteSpace: "nowrap",
     };
 
     const containerStyle: React.CSSProperties = {
@@ -834,7 +835,7 @@ export default function App() {
         );
 
         return (
-          <span className="flex flex-wrap gap-x-1 justify-center">
+          <span className="flex flex-nowrap whitespace-nowrap gap-x-1.5 justify-center">
             {lineWords.map((word, idx) => {
               const globalIdx = wordStartIndex + idx;
               const isActive = globalIdx === currentWordIndex;
@@ -919,8 +920,8 @@ export default function App() {
     };
 
     // Evaluate line animations (e.g. falling, expanding, popping lines)
-    let line1Style: React.CSSProperties = { display: "inline-block" };
-    let line2Style: React.CSSProperties = { display: "inline-block" };
+    let line1Style: React.CSSProperties = { display: "inline-block", whiteSpace: "nowrap" };
+    let line2Style: React.CSSProperties = { display: "inline-block", whiteSpace: "nowrap" };
 
     if (animType === "popping lines" || animType === "line by line") {
       const lineDuration = duration / 2;
@@ -1173,18 +1174,37 @@ export default function App() {
 
   // Live HTML highlight representation
   const renderCaptionTextHTML = (text: string, templateId: TemplateId) => {
+    const words = text.split(/\s+/).filter(Boolean);
+    const splitLimit = 6;
+    const useTwoLines = words.length > splitLimit;
+    const line1Words = useTwoLines ? words.slice(0, Math.ceil(words.length / 2)) : words;
+    const line2Words = useTwoLines ? words.slice(Math.ceil(words.length / 2)) : [];
+
+    const line1Text = line1Words.join(" ");
+    const line2Text = line2Words.join(" ");
+
     if (templateId === "emoji-fusion") {
       const emoji = getEmojiForText(text);
       return (
-        <span className="flex items-center gap-1.5 justify-center">
-          {text} <span className="text-xl md:text-2xl animate-bounce inline-block">{emoji}</span>
+        <span className="flex flex-col gap-1 items-center justify-center text-center">
+          {useTwoLines ? (
+            <>
+              <span className="whitespace-nowrap">{line1Text}</span>
+              <span className="whitespace-nowrap flex items-center gap-1.5 justify-center">
+                {line2Text} <span className="text-xl md:text-2xl animate-bounce inline-block">{emoji}</span>
+              </span>
+            </>
+          ) : (
+            <span className="whitespace-nowrap flex items-center gap-1.5 justify-center">
+              {line1Text} <span className="text-xl md:text-2xl animate-bounce inline-block">{emoji}</span>
+            </span>
+          )}
         </span>
       );
     }
 
     if (templateId === "karaoke-pro") {
       const activeCaption = captions.find(c => currentTime >= c.start && currentTime <= c.end);
-      const words = text.split(/\s+/);
       let activeWordIndex = -1;
       if (activeCaption) {
         const totalDuration = (activeCaption.end - activeCaption.start) || 2.5;
@@ -1195,10 +1215,12 @@ export default function App() {
           Math.max(0, Math.floor(elapsed / wordDuration))
         );
       }
-      return (
-        <span className="inline-flex flex-wrap justify-center gap-x-1.5 leading-tight">
-          {words.map((word, idx) => {
-            const isActive = idx === activeWordIndex;
+
+      const renderKaraokeLine = (lineWordsList: string[], wordStartIndex: number) => (
+        <span className="flex flex-nowrap whitespace-nowrap justify-center gap-x-1.5 leading-tight">
+          {lineWordsList.map((word, idx) => {
+            const originalIndex = wordStartIndex + idx;
+            const isActive = originalIndex === activeWordIndex;
             return (
               <span 
                 key={idx} 
@@ -1214,31 +1236,140 @@ export default function App() {
           })}
         </span>
       );
-    }
 
-    if (templateId === "viral-highlights") {
-      const words = text.split(/\s+/);
-      if (words.length <= 1) return <span>{text}</span>;
-      const longestWord = [...words].sort((a, b) => b.length - a.length)[0];
       return (
-        <span className="inline-flex flex-wrap justify-center gap-x-1.5 leading-tight">
-          {words.map((word, idx) => {
-            const isHighlighted = word === longestWord;
-            let colorClass = "text-white";
-            if (isHighlighted) colorClass = "text-green-400 font-extrabold scale-105 inline-block";
-            else if (idx % 2 === 0) colorClass = "text-white";
-            else colorClass = "text-yellow-400";
-            return <span key={idx} className={colorClass}>{word}</span>;
-          })}
+        <span className="flex flex-col gap-1 items-center justify-center text-center">
+          {useTwoLines ? (
+            <>
+              {renderKaraokeLine(line1Words, 0)}
+              {renderKaraokeLine(line2Words, line1Words.length)}
+            </>
+          ) : (
+            renderKaraokeLine(line1Words, 0)
+          )}
         </span>
       );
     }
 
-    if (templateId === "viral-shorts" || templateId === "mrbeast-style" || templateId === "reels-trending") {
-      return <span>{text.toUpperCase()}</span>;
+    if (templateId === "viral-highlights") {
+      const globalWords = (line1Text + " " + line2Text).trim().split(/\s+/).filter(Boolean);
+      const longestWord = [...globalWords].sort((a, b) => b.length - a.length)[0];
+
+      const renderHighlightLine = (lineWordsList: string[]) => (
+        <span className="flex flex-nowrap whitespace-nowrap justify-center gap-x-1.5 leading-tight">
+          {lineWordsList.map((word, idx) => {
+            const isHighlighted = word === longestWord && globalWords.length > 1;
+            let colorClass = "text-white";
+            if (isHighlighted) colorClass = "text-green-400 font-extrabold scale-105 inline-block";
+            else if (idx % 2 === 0) colorClass = "text-white";
+            else colorClass = "text-pink-500 font-semibold";
+            return <span key={idx} className={colorClass}>{word}</span>;
+          })}
+        </span>
+      );
+
+      return (
+        <span className="flex flex-col gap-1 items-center justify-center text-center">
+          {useTwoLines ? (
+            <>
+              {renderHighlightLine(line1Words)}
+              {renderHighlightLine(line2Words)}
+            </>
+          ) : (
+            renderHighlightLine(line1Words)
+          )}
+        </span>
+      );
     }
 
-    return <span>{text}</span>;
+    if (templateId === "mrbeast-style") {
+      const globalWords = (line1Text + " " + line2Text).trim().split(/\s+/).filter(Boolean);
+      const longestWord = [...globalWords].sort((a, b) => b.length - a.length)[0];
+
+      const renderBeastLine = (lineWordsList: string[]) => (
+        <span className="flex flex-nowrap whitespace-nowrap justify-center gap-x-1.5 leading-none py-1 select-none">
+          {lineWordsList.map((word, idx) => {
+            const isHighlighted = word.toUpperCase() === longestWord.toUpperCase() && globalWords.length > 1;
+            let colorClass = "text-white";
+            if (isHighlighted) colorClass = "text-green-400 font-extrabold scale-110 inline-block drop-shadow-[2px_2px_0_rgba(0,0,0,1)]";
+            else if (idx % 2 === 0) colorClass = "text-white font-extrabold drop-shadow-[2px_2px_0_rgba(0,0,0,1)]";
+            else colorClass = "text-yellow-400 font-extrabold drop-shadow-[2px_2px_0_rgba(0,0,0,1)]";
+            return <span key={idx} className={`${colorClass} transform -rotate-2`}>{word.toUpperCase()}</span>;
+          })}
+        </span>
+      );
+
+      return (
+        <span className="flex flex-col gap-1 items-center justify-center text-center">
+          {useTwoLines ? (
+            <>
+              {renderBeastLine(line1Words)}
+              {renderBeastLine(line2Words)}
+            </>
+          ) : (
+            renderBeastLine(line1Words)
+          )}
+        </span>
+      );
+    }
+
+    if (templateId === "viral-shorts") {
+      return (
+        <span className="flex flex-col gap-1 items-center justify-center text-center">
+          {useTwoLines ? (
+            <>
+              <span className="text-white whitespace-nowrap font-extrabold drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">{line1Text.toUpperCase()}</span>
+              <span className="text-yellow-400 whitespace-nowrap font-extrabold drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">{line2Text.toUpperCase()}</span>
+            </>
+          ) : (
+            <span className="text-yellow-400 whitespace-nowrap font-extrabold drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">{line1Text.toUpperCase()}</span>
+          )}
+        </span>
+      );
+    }
+
+    if (templateId === "reels-trending") {
+      return (
+        <span className="flex flex-col gap-1 items-center justify-center text-center">
+          {useTwoLines ? (
+            <>
+              <span className="whitespace-nowrap font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">{line1Text.toUpperCase()}</span>
+              <span className="whitespace-nowrap font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">{line2Text.toUpperCase()}</span>
+            </>
+          ) : (
+            <span className="whitespace-nowrap font-bold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]">{line1Text.toUpperCase()}</span>
+          )}
+        </span>
+      );
+    }
+
+    if (templateId === "emotional-story") {
+      return (
+        <span className="flex flex-col gap-1 items-center justify-center text-center italic font-medium">
+          {useTwoLines ? (
+            <>
+              <span className="whitespace-nowrap text-white/90">{line1Text}</span>
+              <span className="whitespace-nowrap text-amber-100">{line2Text}</span>
+            </>
+          ) : (
+            <span className="whitespace-nowrap text-amber-100">{line1Text}</span>
+          )}
+        </span>
+      );
+    }
+
+    return (
+      <span className="flex flex-col gap-1 items-center justify-center text-center">
+        {useTwoLines ? (
+          <>
+            <span className="whitespace-nowrap">{line1Text}</span>
+            <span className="whitespace-nowrap">{line2Text}</span>
+          </>
+        ) : (
+          <span className="whitespace-nowrap">{line1Text}</span>
+        )}
+      </span>
+    );
   };
 
   const getDynamicStyle = (tmplId: TemplateId) => {

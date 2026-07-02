@@ -425,18 +425,28 @@ function splitPhrasesIntoPunchyChunks(phrases: CaptionSegment[]): CaptionSegment
       currentStart = wordEnd;
     }
 
-    // Now, group these individual words into punchy chunks of 1-2 words
+    // Now, group these individual words into punchy chunks of 4-7 words (optimal landscape/premium readability)
     let j = 0;
     while (j < wordTimings.length) {
+      const remainingWords = wordTimings.length - j;
+      let wordsInThisChunk = 5; // standard target is 5 words per line
+
+      if (remainingWords <= 7) {
+        // If 7 or fewer words are remaining, put them all in one chunk, which can then be elegantly split into 1 or 2 lines by the templates
+        wordsInThisChunk = remainingWords;
+      } else if (remainingWords === 8) {
+        // split into two balanced chunks of 4 words
+        wordsInThisChunk = 4;
+      } else if (remainingWords === 9) {
+        // split into 5 and 4 words
+        wordsInThisChunk = 5;
+      }
+
       const chunkWords: string[] = [];
       const chunkStart = wordTimings[j].start;
-      
-      chunkWords.push(wordTimings[j].word);
-      let chunkEnd = wordTimings[j].end;
-      j++;
+      let chunkEnd = chunkStart;
 
-      // Group next word into the chunk if available
-      if (j < wordTimings.length) {
+      for (let k = 0; k < wordsInThisChunk && j < wordTimings.length; k++) {
         chunkWords.push(wordTimings[j].word);
         chunkEnd = wordTimings[j].end;
         j++;
