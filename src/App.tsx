@@ -2220,8 +2220,8 @@ export default function App() {
               </div>
             )}
 
-            {/* Left Side: Upload Zone & WYSIWYG Video Editor */}
-            <section className={`col-span-1 lg:col-span-7 ${videoUrl ? "sticky top-[68px] lg:top-24 z-40 bg-slate-950 py-2.5 lg:py-0" : "lg:sticky lg:top-24"} self-start flex flex-col gap-4`}>
+            {/* Right Side: Sticky WYSIWYG Video Editor (Compact layout on mobile, premium sticky sidebar on desktop) */}
+            <section className={`col-span-1 lg:col-span-5 lg:order-2 ${videoUrl ? "sticky top-[68px] lg:top-24 z-40 bg-slate-950/95 backdrop-blur-md py-2 px-1 lg:p-0 rounded-2xl shadow-xl lg:shadow-none" : "lg:sticky lg:top-24"} self-start flex flex-col gap-4`}>
           {/* 1. Upload Deck */}
           {!videoUrl ? (
             <div 
@@ -2291,7 +2291,7 @@ export default function App() {
               <div 
                 ref={playerContainerRef}
                 style={getPlayerAspectRatioStyle()}
-                className="relative bg-black max-h-[450px] xs:max-h-[550px] sm:max-h-[650px] lg:max-h-[750px] w-full flex items-center justify-center group/player overflow-hidden select-none transition-all duration-300"
+                className="relative bg-black max-h-[220px] xs:max-h-[260px] sm:max-h-[320px] md:max-h-[380px] lg:max-h-[540px] w-full flex items-center justify-center group/player overflow-hidden select-none transition-all duration-300 rounded-2xl"
               >
                 <video
                   ref={videoRef}
@@ -2473,8 +2473,8 @@ export default function App() {
           )}
         </section>
 
-        {/* Right Side: Control Panels & Captions Timeline */}
-        <section className="lg:col-span-5 flex flex-col gap-5">
+        {/* Left Side: Control Panels & Captions Timeline (Spacious scrollable workflow on desktop) */}
+        <section className="col-span-1 lg:col-span-7 lg:order-1 flex flex-col gap-5">
           {/* 1. Generator & Templates Control Hub */}
           <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 space-y-5 shadow-xl">
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
