@@ -36,6 +36,7 @@ export default function VideoExporter({
   const [progress, setProgress] = useState(0);
   const [exportComplete, setExportComplete] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [isConvertingToMp4, setIsConvertingToMp4] = useState(false);
 
   // Export Settings (Speed is locked to 1.0x to preserve length, timings, and vocal tone)
   const [resolution, setResolution] = useState<"original" | "1080p" | "2k" | "4k">("original");
@@ -364,32 +365,95 @@ export default function VideoExporter({
         }
       };
 
-      recorder.onstop = () => {
-        const fileExt = mimeType.includes("mp4") ? "mp4" : "webm";
-        const resultBlob = new Blob(chunks, { type: mimeType });
-        const downloadUrl = URL.createObjectURL(resultBlob);
+      recorder.onstop = async () => {
+        setIsConvertingToMp4(true);
+        try {
+          const resultBlob = new Blob(chunks, { type: mimeType });
+          
+          // Read the WebM blob as a base64 string to send to the server
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onloadend = () => {
+              if (typeof reader.result === "string") {
+                const base64data = reader.result.split(",")[1];
+                resolve(base64data);
+              } else {
+                reject(new Error("Failed to read video blob as base64 string."));
+              }
+            };
+            reader.onerror = () => reject(new Error("FileReader failed."));
+          });
+          reader.readAsDataURL(resultBlob);
+          const videoBase64 = await base64Promise;
 
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.download = `odia_viral_captions_${resolution}_${Date.now()}.${fileExt}`;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(downloadUrl);
-        }, 150);
+          console.log("[Export] Sending WebM blob to server for high-compatibility MP4 transcode...");
+          
+          const outputName = `odia_viral_captions_${resolution}_${Date.now()}.mp4`;
+          
+          const response = await fetch("/api/transcode", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              videoBase64,
+              filename: outputName,
+            }),
+          });
 
-        if (audioContextRef.current) {
-          audioContextRef.current.close().catch(() => {});
-          audioContextRef.current = null;
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || "Server-side MP4 transcoding failed.");
+          }
+
+          const mp4Blob = await response.blob();
+          const downloadUrl = URL.createObjectURL(mp4Blob);
+
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = outputName;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          document.body.appendChild(link);
+          link.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+          }, 150);
+
+        } catch (transcodeErr: any) {
+          console.warn("[Export] Server transcode failed or timed out. Falling back to direct WebM download:", transcodeErr.message);
+          
+          // Fallback: Directly download the recorded WebM file so user doesn't lose anything
+          const fileExt = mimeType.includes("mp4") ? "mp4" : "webm";
+          const resultBlob = new Blob(chunks, { type: mimeType });
+          const downloadUrl = URL.createObjectURL(resultBlob);
+
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = `odia_viral_captions_${resolution}_${Date.now()}.${fileExt}`;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          document.body.appendChild(link);
+          link.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+          }, 150);
+        } finally {
+          setIsConvertingToMp4(false);
+          
+          if (audioContextRef.current) {
+            audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
+          }
+
+          setExportComplete(true);
+          setIsExporting(false);
+          cleanupDom(); // Clean up temporary DOM nodes on completion
         }
-
-        setExportComplete(true);
-        setIsExporting(false);
-        cleanupDom(); // Clean up temporary DOM nodes on completion
       };
 
       // Set up drawing tick
@@ -649,17 +713,21 @@ export default function VideoExporter({
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-slate-300 flex items-center gap-2">
               <Loader2 className="w-4.5 h-4.5 animate-spin text-pink-500" />
-              <span>Compiling {resolution.toUpperCase()} Video (ओरिजिनल क्वालिटी)...</span>
+              {isConvertingToMp4 ? (
+                <span>Converting to highly compatible MP4... (सोशल मीडिया के लिए वीडियो तैयार हो रहा है)</span>
+              ) : (
+                <span>Compiling {resolution.toUpperCase()} Video (ओरिजिनल क्वालिटी)...</span>
+              )}
             </span>
             <span className="text-sm font-mono font-black text-pink-400">
-              {progress}%
+              {isConvertingToMp4 ? "Transcoding..." : `${progress}%`}
             </span>
           </div>
 
           <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
             <div
               className="bg-gradient-to-r from-pink-500 to-purple-600 h-full rounded-full transition-all duration-200"
-              style={{ width: `${progress}%` }}
+              style={{ width: isConvertingToMp4 ? "100%" : `${progress}%` }}
             />
           </div>
 
@@ -673,14 +741,20 @@ export default function VideoExporter({
           </div>
 
           <div className="flex justify-between items-center text-xs text-slate-400">
-            <span>Keep tab open. Canvas rendering...</span>
-            <button
-              onClick={handleCancel}
-              className="text-red-400 hover:text-red-300 font-bold underline cursor-pointer"
-              id="btn-cancel-export"
-            >
-              Cancel
-            </button>
+            <span>
+              {isConvertingToMp4 
+                ? "Baking high-quality H.264/AAC MP4..." 
+                : "Keep tab open. Canvas rendering..."}
+            </span>
+            {!isConvertingToMp4 && (
+              <button
+                onClick={handleCancel}
+                className="text-red-400 hover:text-red-300 font-bold underline cursor-pointer"
+                id="btn-cancel-export"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         </div>
       )}

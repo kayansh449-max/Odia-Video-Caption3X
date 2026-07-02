@@ -1,6 +1,9 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import fs from "fs";
+import os from "os";
+import { exec } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -967,6 +970,94 @@ app.post("/api/synthesize", async (req, res) => {
     res.status(500).json({ error: error.message || "Failed to generate synchronized voice track." });
   }
 });
+
+// 3. API: Transcode WebM to highly compatible MP4 (H.264 + AAC) using server-side ffmpeg
+app.post("/api/transcode", async (req, res) => {
+  const tempFiles: string[] = [];
+  try {
+    const { videoBase64, filename } = req.body;
+
+    if (!videoBase64) {
+      return res.status(400).json({ error: "Missing videoBase64 payload" });
+    }
+
+    const outputFilename = filename ? filename.replace(/\.[^/.]+$/, "") + ".mp4" : `odia_viral_captions_${Date.now()}.mp4`;
+    
+    // Create temporary unique file paths
+    const randomId = Math.random().toString(36).substring(2, 10);
+    const tempInPath = path.join(os.tmpdir(), `input_${randomId}.webm`);
+    const tempOutPath = path.join(os.tmpdir(), `output_${randomId}.mp4`);
+
+    tempFiles.push(tempInPath, tempOutPath);
+
+    console.log(`[Transcode] Writing temporary input WebM of size ${(videoBase64.length / (1024 * 1024)).toFixed(2)} MB to ${tempInPath}`);
+    const buffer = Buffer.from(videoBase64, "base64");
+    await fs.promises.writeFile(tempInPath, buffer);
+
+    console.log(`[Transcode] Transcoding ${tempInPath} -> ${tempOutPath} using FFmpeg...`);
+    
+    // Execute FFmpeg command to convert WebM to H.264 / AAC MP4 with high-compatibility and high-performance settings
+    const ffmpegCmd = `ffmpeg -y -i "${tempInPath}" -c:v libx264 -preset superfast -crf 21 -pix_fmt yuv420p -map 0:v -map 0:a? -c:a aac -b:a 128k -strict -2 "${tempOutPath}"`;
+
+    await new Promise<void>((resolve, reject) => {
+      exec(ffmpegCmd, (err, stdout, stderr) => {
+        if (err) {
+          console.error("[Transcode] FFmpeg execution error:", err);
+          console.error("[Transcode] FFmpeg stderr:", stderr);
+          reject(new Error(`FFmpeg transcoding failed: ${err.message}`));
+        } else {
+          console.log("[Transcode] FFmpeg transcoding completed successfully!");
+          resolve();
+        }
+      });
+    });
+
+    if (!fs.existsSync(tempOutPath)) {
+      throw new Error("Transcoded MP4 file was not created by FFmpeg.");
+    }
+
+    const stat = await fs.promises.stat(tempOutPath);
+    console.log(`[Transcode] Transcoded MP4 successfully of size ${(stat.size / (1024 * 1024)).toFixed(2)} MB. Streaming to client...`);
+
+    // Stream the resulting MP4 file back to the browser
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(outputFilename)}"`);
+
+    const readStream = fs.createReadStream(tempOutPath);
+    readStream.pipe(res);
+
+    readStream.on("end", () => {
+      console.log(`[Transcode] Stream finished. Initiating temp file cleanup...`);
+      cleanupTempFiles(tempFiles);
+    });
+
+    readStream.on("error", (streamErr) => {
+      console.error("[Transcode] ReadStream error:", streamErr);
+      cleanupTempFiles(tempFiles);
+    });
+
+  } catch (err: any) {
+    console.error("[Transcode] Transcode route failed:", err);
+    cleanupTempFiles(tempFiles);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || "Failed to transcode video." });
+    }
+  }
+});
+
+function cleanupTempFiles(paths: string[]) {
+  paths.forEach(p => {
+    try {
+      if (fs.existsSync(p)) {
+        fs.unlinkSync(p);
+        console.log(`[Transcode] Cleaned up temporary file: ${p}`);
+      }
+    } catch (e: any) {
+      console.warn(`[Transcode] Error cleaning up temporary file ${p}:`, e.message);
+    }
+  });
+}
 
 // 2. Vite Integration for Frontend Hosting
 async function startServer() {
