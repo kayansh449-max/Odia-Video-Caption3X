@@ -768,13 +768,13 @@ export default function App() {
 
     if (animType === "fade in") {
       const fadeDuration = 0.3 * (settings.animationDuration || 1.0) / animSpeed;
-      opacity = Math.min(1.0, elapsed / fadeDuration);
+      opacity = Math.max(0.0, Math.min(1.0, elapsed / fadeDuration));
     } else if (animType === "fade out") {
       const fadeOutDuration = 0.3 * (settings.animationDuration || 1.0) / animSpeed;
       const remaining = end - currTime;
       opacity = Math.max(0.0, Math.min(1.0, remaining / fadeOutDuration));
     } else if (animType === "zoom") {
-      const progress = Math.min(1.0, elapsed / duration);
+      const progress = Math.max(0.0, Math.min(1.0, elapsed / duration));
       const scale = 1.0 + progress * 0.25 * (animIntensity / 5) * animSpeed;
       transform = `scale(${scale})`;
     } else if (animType === "shake") {
@@ -849,7 +849,7 @@ export default function App() {
               } else if (animType === "popping word by word") {
                 if (isActive) {
                   const wordElapsed = elapsed - (globalIdx * wordDuration);
-                  wordScale = 1.0 + Math.sin(Math.min(Math.PI, (wordElapsed / wordDuration) * Math.PI)) * 0.3 * (animIntensity / 5);
+                  wordScale = 1.0 + Math.sin(Math.max(0.0, Math.min(Math.PI, (wordElapsed / wordDuration) * Math.PI))) * 0.3 * (animIntensity / 5);
                   wordColor = "#22c55e"; // bright green
                 }
               } else if (animType === "active word") {
@@ -861,7 +861,7 @@ export default function App() {
               } else if (animType === "active word zoom") {
                 if (isActive) {
                   const wordElapsed = elapsed - (globalIdx * wordDuration);
-                  wordScale = 1.1 + Math.sin(Math.min(Math.PI, (wordElapsed / wordDuration) * Math.PI)) * 0.2;
+                  wordScale = 1.1 + Math.sin(Math.max(0.0, Math.min(Math.PI, (wordElapsed / wordDuration) * Math.PI))) * 0.2;
                   wordColor = "#facc15";
                 } else {
                   wordScale = 0.9;
@@ -870,7 +870,7 @@ export default function App() {
               } else if (animType === "popping words") {
                 if (hasBeenSpoken) {
                   const wordElapsed = elapsed - (globalIdx * wordDuration);
-                  wordScale = Math.min(1.0, wordElapsed / (0.15 / animSpeed)) * 1.1;
+                  wordScale = Math.max(0.0, Math.min(1.0, wordElapsed / (0.15 / animSpeed))) * 1.1;
                   if (isActive) wordScale = 1.25;
                 } else {
                   wordAlpha = 0.0;
@@ -3256,7 +3256,7 @@ export default function App() {
                   return (
                     <button
                       key={tmpl.id}
-                      onClick={() => setSelectedTemplate(tmpl.id)}
+                      onClick={() => applyTemplatePreset(tmpl.id)}
                       className={`p-3 rounded-2xl text-left border-2 transition-all flex flex-col justify-between cursor-pointer ${
                         isActive 
                           ? "bg-slate-950 border-pink-500 shadow-lg shadow-pink-500/10 scale-[1.02]" 
