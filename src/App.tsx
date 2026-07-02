@@ -2976,7 +2976,7 @@ export default function App() {
               </button>
 
               {/* Aspect Ratio Display Stage */}
-              <div className="w-full h-[260px] xs:h-[320px] sm:h-[380px] lg:h-[480px] bg-slate-950/60 p-2 sm:p-4 flex items-center justify-center relative overflow-hidden border-b border-slate-800">
+              <div className="w-full h-[260px] xs:h-[320px] sm:h-[380px] lg:h-[480px] bg-slate-950/60 p-2 sm:p-4 flex items-center justify-center relative overflow-hidden">
                 {/* Visual player box with true aspect ratio */}
                 <div 
                   ref={playerContainerRef}
@@ -3052,34 +3052,34 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Player Timeline Seek bar */}
-              <div className="px-5 py-4 border-t border-slate-800 bg-slate-900/90 space-y-4">
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={togglePlay}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2 rounded-xl transition cursor-pointer"
-                    id="btn-play-pause"
-                  >
-                    {isPlaying ? <Pause className="w-4 h-4 fill-slate-200" /> : <Play className="w-4 h-4 fill-slate-200 translate-x-0.5" />}
-                  </button>
+            {/* 2.5 Player Timeline Seek bar (Scrollable, NOT sticky) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4 shadow-xl mt-1.5">
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={togglePlay}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2 rounded-xl transition cursor-pointer"
+                  id="btn-play-pause"
+                >
+                  {isPlaying ? <Pause className="w-4 h-4 fill-slate-200" /> : <Play className="w-4 h-4 fill-slate-200 translate-x-0.5" />}
+                </button>
 
-                  <div className="flex-1">
-                    <input
-                      type="range"
-                      min={0}
-                      max={duration || 100}
-                      step={0.05}
-                      value={currentTime}
-                      onChange={(e) => seekTo(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                    />
-                  </div>
-
-                  <span className="text-xs font-mono font-bold text-slate-400">
-                    {currentTime.toFixed(1)}s / {duration.toFixed(1)}s
-                  </span>
+                <div className="flex-1">
+                  <input
+                    type="range"
+                    min={0}
+                    max={duration || 100}
+                    step={0.05}
+                    value={currentTime}
+                    onChange={(e) => seekTo(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
                 </div>
+
+                <span className="text-xs font-mono font-bold text-slate-400">
+                  {currentTime.toFixed(1)}s / {duration.toFixed(1)}s
+                </span>
               </div>
             </div>
 

@@ -39,6 +39,7 @@ export default function VideoExporter({
   const [isConvertingToMp4, setIsConvertingToMp4] = useState(false);
   const [exportedVideoUrl, setExportedVideoUrl] = useState<string | null>(null);
   const [exportedVideoFilename, setExportedVideoFilename] = useState<string>("");
+  const [videoName, setVideoName] = useState<string>("");
 
   // Export Settings (Speed is locked to 1.0x to preserve length, timings, and vocal tone)
   const [resolution, setResolution] = useState<"original" | "1080p" | "2k" | "4k">("original");
@@ -400,7 +401,15 @@ export default function VideoExporter({
 
           console.log("[Export] Sending WebM blob to server for high-compatibility MP4 transcode...");
           
-          const outputName = `odia_viral_captions_${resolution}_${Date.now()}.mp4`;
+          let cleanBaseName = videoName.trim()
+            ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s]/g, "")
+            : `odia_viral_captions_${resolution}_${Date.now()}`;
+          
+          // Force .mp4 at the end so it's a valid video file
+          if (!cleanBaseName.toLowerCase().endsWith(".mp4")) {
+            cleanBaseName += ".mp4";
+          }
+          const outputName = cleanBaseName;
           
           const response = await fetch("/api/transcode", {
             method: "POST",
@@ -441,8 +450,18 @@ export default function VideoExporter({
           console.warn("[Export] Server transcode failed or timed out. Falling back to direct WebM download:", transcodeErr.message);
           
           // Fallback: Directly download the recorded WebM file so user doesn't lose anything
+          let cleanFallbackName = videoName.trim()
+            ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s]/g, "")
+            : `odia_viral_captions_${resolution}_${Date.now()}`;
+          
           const fileExt = mimeType.includes("mp4") ? "mp4" : "webm";
-          const outputName = `odia_viral_captions_${resolution}_${Date.now()}.${fileExt}`;
+          if (!cleanFallbackName.toLowerCase().endsWith(`.${fileExt}`)) {
+            if (cleanFallbackName.toLowerCase().endsWith(".mp4") && fileExt === "webm") {
+              cleanFallbackName = cleanFallbackName.substring(0, cleanFallbackName.length - 4);
+            }
+            cleanFallbackName += `.${fileExt}`;
+          }
+          const outputName = cleanFallbackName;
           const resultBlob = new Blob(chunks, { type: mimeType });
           const downloadUrl = URL.createObjectURL(resultBlob);
 
@@ -714,6 +733,24 @@ export default function VideoExporter({
               </label>
             </div>
           )}
+
+          {/* Custom Filename Input Box */}
+          <div className="flex flex-col gap-2 bg-slate-900/50 p-3.5 rounded-2xl border border-slate-850/60">
+            <label className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Film className="w-3.5 h-3.5 text-pink-400" /> वीडियो का नाम दर्ज करें (Video Filename)
+            </label>
+            <input
+              type="text"
+              placeholder="odia_viral_video"
+              value={videoName}
+              onChange={(e) => setVideoName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-pink-500/50 transition font-bold"
+              id="input-video-filename"
+            />
+            <p className="text-[10px] text-slate-400 leading-relaxed font-semibold">
+              <span className="text-pink-400 font-extrabold">महत्वपूर्ण:</span> वीडियो सीधे इसी नाम के साथ <strong className="text-emerald-400">.mp4</strong> फॉर्मेट में डाउनलोड होगा। (Extension will be auto-saved).
+            </p>
+          </div>
 
           {/* Core Export button */}
           <button
