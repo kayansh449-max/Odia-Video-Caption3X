@@ -37,6 +37,8 @@ export default function VideoExporter({
   const [exportComplete, setExportComplete] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isConvertingToMp4, setIsConvertingToMp4] = useState(false);
+  const [exportedVideoUrl, setExportedVideoUrl] = useState<string | null>(null);
+  const [exportedVideoFilename, setExportedVideoFilename] = useState<string>("");
 
   // Export Settings (Speed is locked to 1.0x to preserve length, timings, and vocal tone)
   const [resolution, setResolution] = useState<"original" | "1080p" | "2k" | "4k">("original");
@@ -77,6 +79,16 @@ export default function VideoExporter({
       await audioCtx.resume().catch(() => {});
     } catch (e) {
       console.warn("[Export] AudioContext pre-creation failed:", e);
+    }
+
+    if (exportedVideoUrl) {
+      try {
+        URL.revokeObjectURL(exportedVideoUrl);
+      } catch (err) {
+        console.warn("[Export] Error revoking previous object URL:", err);
+      }
+      setExportedVideoUrl(null);
+      setExportedVideoFilename("");
     }
 
     setIsExporting(true);
@@ -409,6 +421,10 @@ export default function VideoExporter({
           const mp4Blob = await response.blob();
           const downloadUrl = URL.createObjectURL(mp4Blob);
 
+          // Save to state for manual click fallback and future retrieval
+          setExportedVideoUrl(downloadUrl);
+          setExportedVideoFilename(outputName);
+
           const link = document.createElement("a");
           link.href = downloadUrl;
           link.download = outputName;
@@ -419,7 +435,6 @@ export default function VideoExporter({
           
           setTimeout(() => {
             document.body.removeChild(link);
-            URL.revokeObjectURL(downloadUrl);
           }, 150);
 
         } catch (transcodeErr: any) {
@@ -427,12 +442,17 @@ export default function VideoExporter({
           
           // Fallback: Directly download the recorded WebM file so user doesn't lose anything
           const fileExt = mimeType.includes("mp4") ? "mp4" : "webm";
+          const outputName = `odia_viral_captions_${resolution}_${Date.now()}.${fileExt}`;
           const resultBlob = new Blob(chunks, { type: mimeType });
           const downloadUrl = URL.createObjectURL(resultBlob);
 
+          // Save WebM to state so the user can manually click to download if the pop-up/auto-download is blocked
+          setExportedVideoUrl(downloadUrl);
+          setExportedVideoFilename(outputName);
+
           const link = document.createElement("a");
           link.href = downloadUrl;
-          link.download = `odia_viral_captions_${resolution}_${Date.now()}.${fileExt}`;
+          link.download = outputName;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
           document.body.appendChild(link);
@@ -440,7 +460,6 @@ export default function VideoExporter({
           
           setTimeout(() => {
             document.body.removeChild(link);
-            URL.revokeObjectURL(downloadUrl);
           }, 150);
         } finally {
           setIsConvertingToMp4(false);
@@ -766,16 +785,46 @@ export default function VideoExporter({
               <Check className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-white">Export Complete! (वीडियो डाउनलोड हो गया है)</h4>
+              <h4 className="text-sm font-bold text-white">Export Success! (वीडियो तैयार हो गया है)</h4>
               <p className="text-xs text-emerald-300 mt-1">
-                Your captioned video has been compiled in high resolution **{resolution.toUpperCase()}** and downloaded to your device!
+                Your video with captions has been converted into a high-compatibility format (**{resolution.toUpperCase()}**).
               </p>
             </div>
           </div>
 
-          <div className="flex gap-2.5">
+          {/* Real user-action direct download link to bypass browser iframe restrictions */}
+          {exportedVideoUrl && (
+            <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+              <p className="text-[11px] text-slate-300">
+                अगर वीडियो अपने आप डाउनलोड नहीं हुआ है, तो नीचे दिए गए बटन पर क्लिक करके सीधे गैलरी/स्टोरेज में सेव करें:
+              </p>
+              <a
+                href={exportedVideoUrl}
+                download={exportedVideoFilename}
+                className="w-full text-center bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black py-3 px-5 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer text-sm"
+                id="btn-manual-download"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Download className="w-5 h-5 animate-bounce text-white" />
+                <span>Save Video to Storage (गैलरी में सेव करें)</span>
+              </a>
+            </div>
+          )}
+
+          <div className="flex gap-2.5 pt-1">
             <button
-              onClick={() => setExportComplete(false)}
+              onClick={() => {
+                // Clear state
+                if (exportedVideoUrl) {
+                  try {
+                    URL.revokeObjectURL(exportedVideoUrl);
+                  } catch (e) {}
+                }
+                setExportedVideoUrl(null);
+                setExportedVideoFilename("");
+                setExportComplete(false);
+              }}
               className="flex-1 text-center bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-300 text-xs font-bold py-2 px-4 rounded-xl transition cursor-pointer"
               id="btn-reset-export"
             >
