@@ -102,10 +102,14 @@ export default function VideoExporter({
       video.muted = false;
       video.playsInline = true;
       video.style.position = "absolute";
-      video.style.width = "1px";
-      video.style.height = "1px";
-      video.style.opacity = "0.01";
+      video.style.top = "0";
+      video.style.left = "0";
+      video.style.width = "100%";
+      video.style.height = "100%";
+      video.style.objectFit = "contain";
+      video.style.opacity = "1";
       video.style.pointerEvents = "none";
+      video.style.zIndex = "1";
       exportVideoRef.current = video;
 
       // Find preview box to render into
@@ -223,9 +227,13 @@ export default function VideoExporter({
       canvasRef.current = canvas;
       
       // Scale canvas dynamically to fit the visual preview box smoothly
+      canvas.style.position = "absolute";
+      canvas.style.top = "0";
+      canvas.style.left = "0";
       canvas.style.width = "100%";
       canvas.style.height = "100%";
       canvas.style.objectFit = "contain";
+      canvas.style.zIndex = "10";
       
       container.appendChild(canvas);
       
@@ -364,9 +372,15 @@ export default function VideoExporter({
         const link = document.createElement("a");
         link.href = downloadUrl;
         link.download = `odia_viral_captions_${resolution}_${Date.now()}.${fileExt}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
+        
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(downloadUrl);
+        }, 150);
 
         if (audioContextRef.current) {
           audioContextRef.current.close().catch(() => {});
@@ -507,10 +521,15 @@ export default function VideoExporter({
         setTimeout(resolve, 300); // safety fallback
       });
 
+      // Start playback as muted first to guarantee modern browsers allow programmatic playback,
+      // then immediately unmute it so that the Web Audio API can capture the audio stream.
+      video.muted = true;
       try {
         await video.play();
+        video.muted = false;
       } catch (playErr: any) {
-        console.warn("[Export] Unmuted video play failed, retrying with direct play invocation...", playErr.message);
+        console.warn("[Export] Muted video play failed, retrying with unmuted mode directly...", playErr.message);
+        video.muted = false;
         if (audioCtx) {
           await audioCtx.resume().catch(() => {});
         }
