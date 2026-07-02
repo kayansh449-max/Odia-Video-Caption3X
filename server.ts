@@ -996,21 +996,58 @@ app.post("/api/transcode", async (req, res) => {
 
     console.log(`[Transcode] Transcoding ${tempInPath} -> ${tempOutPath} using FFmpeg...`);
     
-    // Execute FFmpeg command to convert WebM to H.264 / AAC MP4 with high-compatibility and high-performance settings
-    const ffmpegCmd = `ffmpeg -y -i "${tempInPath}" -c:v libx264 -preset superfast -crf 21 -pix_fmt yuv420p -map 0:v -map 0:a? -c:a aac -b:a 128k -strict -2 "${tempOutPath}"`;
+    let transcodeSuccess = false;
+    let transcodeErrorMsg = "";
 
-    await new Promise<void>((resolve, reject) => {
-      exec(ffmpegCmd, (err, stdout, stderr) => {
-        if (err) {
-          console.error("[Transcode] FFmpeg execution error:", err);
-          console.error("[Transcode] FFmpeg stderr:", stderr);
-          reject(new Error(`FFmpeg transcoding failed: ${err.message}`));
-        } else {
-          console.log("[Transcode] FFmpeg transcoding completed successfully!");
-          resolve();
-        }
+    // Attempt 1: Full High-Fidelity MP4 with H.264 video and AAC audio
+    // We add "-fflags +genpts" to correct presentation timestamps from Canvas MediaRecorder.
+    const ffmpegCmdWithAudio = `ffmpeg -y -fflags +genpts -i "${tempInPath}" -c:v libx264 -preset superfast -crf 21 -pix_fmt yuv420p -map 0:v -map 0:a? -c:a aac -b:a 128k -strict -2 "${tempOutPath}"`;
+    
+    try {
+      console.log(`[Transcode] Attempting transcode with audio: ${ffmpegCmdWithAudio}`);
+      await new Promise<void>((resolve, reject) => {
+        exec(ffmpegCmdWithAudio, (err, stdout, stderr) => {
+          if (err) {
+            console.warn("[Transcode] Attempt with audio failed. FFmpeg stderr:", stderr);
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
       });
-    });
+      transcodeSuccess = true;
+      console.log("[Transcode] FFmpeg transcoding with audio completed successfully!");
+    } catch (err: any) {
+      transcodeErrorMsg = err.message;
+      console.warn(`[Transcode] Full transcode with audio failed, attempting robust fallback without audio (-an)...`);
+    }
+
+    // Attempt 2: Fallback to Video-Only H.264 MP4 (handles files where audio is empty or fails to map)
+    if (!transcodeSuccess) {
+      const ffmpegCmdVideoOnly = `ffmpeg -y -fflags +genpts -i "${tempInPath}" -c:v libx264 -preset superfast -crf 21 -pix_fmt yuv420p -an "${tempOutPath}"`;
+      try {
+        console.log(`[Transcode] Attempting video-only fallback: ${ffmpegCmdVideoOnly}`);
+        await new Promise<void>((resolve, reject) => {
+          exec(ffmpegCmdVideoOnly, (err, stdout, stderr) => {
+            if (err) {
+              console.error("[Transcode] Fallback video-only failed. FFmpeg stderr:", stderr);
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        });
+        transcodeSuccess = true;
+        console.log("[Transcode] Fallback video-only transcoding completed successfully!");
+      } catch (err2: any) {
+        transcodeErrorMsg += ` | Fallback Error: ${err2.message}`;
+        console.error("[Transcode] All transcoding attempts failed.");
+      }
+    }
+
+    if (!transcodeSuccess) {
+      throw new Error(`FFmpeg transcoding failed on all attempts. Errors: ${transcodeErrorMsg}`);
+    }
 
     if (!fs.existsSync(tempOutPath)) {
       throw new Error("Transcoded MP4 file was not created by FFmpeg.");

@@ -2906,7 +2906,7 @@ export default function App() {
             )}
 
             {/* Right Side: Sticky WYSIWYG Video Editor (Compact layout on mobile, premium sticky sidebar on desktop) */}
-            <section className={`col-span-1 lg:col-span-5 lg:order-2 ${videoUrl && !showApiSettings ? "sticky top-[68px] lg:top-24 z-40 bg-slate-950/95 backdrop-blur-md py-2 px-1 lg:p-0 rounded-2xl shadow-xl lg:shadow-none" : "lg:sticky lg:top-24"} self-start flex flex-col gap-4`}>
+            <section className="col-span-1 lg:col-span-5 lg:order-2 self-start flex flex-col gap-4">
           {/* 1. Upload Deck */}
           {!videoUrl ? (
             <div 
@@ -2935,7 +2935,9 @@ export default function App() {
           ) : (
             <>
               {/* 2. Custom WYSIWYG Video Player Frame */}
-              <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col relative">
+              <div className={`bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col relative transition-all duration-300 ${
+                videoUrl && !showApiSettings ? "sticky top-[68px] lg:top-24 z-40 bg-slate-900" : ""
+              }`}>
               
               {/* Aspect Ratio Selector - Floating Left */}
               <div className="absolute top-4 left-4 z-30 flex items-center">
@@ -2980,12 +2982,8 @@ export default function App() {
                   ref={playerContainerRef}
                   style={{
                     ...getPlayerAspectRatioStyle(),
-                    maxHeight: "100%",
-                    maxWidth: "100%",
-                    height: "100%",
-                    width: "auto"
                   }}
-                  className="relative bg-black flex items-center justify-center group/player overflow-hidden select-none transition-all duration-300 rounded-xl shadow-2xl"
+                  className="relative bg-black w-auto h-auto max-w-full max-h-full flex items-center justify-center group/player overflow-hidden select-none transition-all duration-300 rounded-xl shadow-2xl"
                 >
                   <video
                     ref={videoRef}
