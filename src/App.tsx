@@ -32,6 +32,7 @@ import {
   AlertCircle,
   X,
   Home,
+  Sliders,
 } from "lucide-react";
 
 const VOICE_CATEGORIES = [
@@ -2932,8 +2933,9 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* 2. Custom WYSIWYG Video Player Frame */
-            <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col relative">
+            <>
+              {/* 2. Custom WYSIWYG Video Player Frame */}
+              <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col relative">
               
               {/* Aspect Ratio Selector - Floating Left */}
               <div className="absolute top-4 left-4 z-30 flex items-center">
@@ -2971,77 +2973,86 @@ export default function App() {
                 Change Video
               </button>
 
-              {/* Video Player + Overlay Stage */}
-              <div 
-                ref={playerContainerRef}
-                style={getPlayerAspectRatioStyle()}
-                className="relative bg-black max-h-[220px] xs:max-h-[260px] sm:max-h-[320px] md:max-h-[380px] lg:max-h-[540px] w-full flex items-center justify-center group/player overflow-hidden select-none transition-all duration-300 rounded-2xl"
-              >
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onClick={togglePlay}
-                  className={`w-full h-full ${aspectRatio === "original" ? "object-contain" : "object-cover"} pointer-events-none transition-all duration-300`}
-                  playsInline
-                />
-
-                {/* REAL-TIME DRAGGABLE & SCALABLE OVERLAY */}
-                {activeCaption && (
-                  <div
-                    onPointerDown={handleCaptionPointerDown}
-                    onPointerMove={handleCaptionPointerMove}
-                    onPointerUp={handleCaptionPointerUp}
-                    style={{
-                      left: `${captionX}%`,
-                      top: `${captionY}%`,
-                      transform: `translate(-50%, -50%) scale(${captionScale})`,
-                      touchAction: "none",
-                    }}
-                    className={`absolute z-30 cursor-move select-none p-2 rounded-2xl border transition-all flex flex-col items-center gap-1 group/overlay ${
-                      isDragging 
-                        ? "border-pink-500 bg-black/40 shadow-[0_0_20px_rgba(236,72,153,0.4)]" 
-                        : "border-transparent hover:border-dashed hover:border-indigo-500/30 bg-transparent"
-                    }`}
-                  >
-                    {/* Tiny drag visual indicator */}
-                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-indigo-600 text-[9px] font-bold text-white px-2.5 py-0.5 rounded-full opacity-0 group-hover/overlay:opacity-100 transition whitespace-nowrap shadow-lg flex items-center gap-1 pointer-events-none">
-                      <Smartphone className="w-2.5 h-2.5 animate-bounce" /> Drag &amp; Size
-                    </div>
-                    
-                    <div key={activeCaption.text} className="pointer-events-none">
-                      {customStyleSettings ? (
-                        renderCustomCaptionHTML(
-                          activeCaption.text,
-                          customStyleSettings,
-                          currentTime + globalTimeOffset,
-                          activeCaption.start,
-                          activeCaption.end
-                        )
-                      ) : (
-                        <div
-                          className={`${TEMPLATES.find(t => t.id === selectedTemplate)?.textClass} pointer-events-none drop-shadow-[0_4px_6px_rgba(0,0,0,0.8)]`}
-                          style={getDynamicStyle(selectedTemplate)}
-                        >
-                          {renderCaptionTextHTML(activeCaption.text, selectedTemplate)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Big Center Play Indicator */}
-                {!isPlaying && (
-                  <div 
+              {/* Aspect Ratio Display Stage */}
+              <div className="w-full h-[260px] xs:h-[320px] sm:h-[380px] lg:h-[480px] bg-slate-950/60 p-2 sm:p-4 flex items-center justify-center relative overflow-hidden border-b border-slate-800">
+                {/* Visual player box with true aspect ratio */}
+                <div 
+                  ref={playerContainerRef}
+                  style={{
+                    ...getPlayerAspectRatioStyle(),
+                    maxHeight: "100%",
+                    maxWidth: "100%",
+                    height: "100%",
+                    width: "auto"
+                  }}
+                  className="relative bg-black flex items-center justify-center group/player overflow-hidden select-none transition-all duration-300 rounded-xl shadow-2xl"
+                >
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
                     onClick={togglePlay}
-                    className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer z-20 transition-opacity opacity-100"
-                  >
-                    <div className="bg-white/10 backdrop-blur-md border border-white/20 p-5 rounded-full scale-110 shadow-2xl transition hover:scale-125">
-                      <Play className="w-8 h-8 fill-white text-white translate-x-0.5" />
+                    className={`w-full h-full ${aspectRatio === "original" ? "object-contain" : "object-cover"} pointer-events-none transition-all duration-300`}
+                    playsInline
+                  />
+
+                  {/* REAL-TIME DRAGGABLE & SCALABLE OVERLAY */}
+                  {activeCaption && (
+                    <div
+                      onPointerDown={handleCaptionPointerDown}
+                      onPointerMove={handleCaptionPointerMove}
+                      onPointerUp={handleCaptionPointerUp}
+                      style={{
+                        left: `${captionX}%`,
+                        top: `${captionY}%`,
+                        transform: `translate(-50%, -50%) scale(${captionScale})`,
+                        touchAction: "none",
+                      }}
+                      className={`absolute z-30 cursor-move select-none p-2 rounded-2xl border transition-all flex flex-col items-center gap-1 group/overlay ${
+                        isDragging 
+                          ? "border-pink-500 bg-black/40 shadow-[0_0_20px_rgba(236,72,153,0.4)]" 
+                          : "border-transparent hover:border-dashed hover:border-indigo-500/30 bg-transparent"
+                      }`}
+                    >
+                      {/* Tiny drag visual indicator */}
+                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-indigo-600 text-[9px] font-bold text-white px-2.5 py-0.5 rounded-full opacity-0 group-hover/overlay:opacity-100 transition whitespace-nowrap shadow-lg flex items-center gap-1 pointer-events-none">
+                        <Smartphone className="w-2.5 h-2.5 animate-bounce" /> Drag &amp; Size
+                      </div>
+                      
+                      <div key={activeCaption.text} className="pointer-events-none">
+                        {customStyleSettings ? (
+                          renderCustomCaptionHTML(
+                            activeCaption.text,
+                            customStyleSettings,
+                            currentTime + globalTimeOffset,
+                            activeCaption.start,
+                            activeCaption.end
+                          )
+                        ) : (
+                          <div
+                            className={`${TEMPLATES.find(t => t.id === selectedTemplate)?.textClass} pointer-events-none drop-shadow-[0_4px_6px_rgba(0,0,0,0.8)]`}
+                            style={getDynamicStyle(selectedTemplate)}
+                          >
+                            {renderCaptionTextHTML(activeCaption.text, selectedTemplate)}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {/* Big Center Play Indicator */}
+                  {!isPlaying && (
+                    <div 
+                      onClick={togglePlay}
+                      className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer z-20 transition-opacity opacity-100"
+                    >
+                      <div className="bg-white/10 backdrop-blur-md border border-white/20 p-5 rounded-full scale-110 shadow-2xl transition hover:scale-125">
+                        <Play className="w-8 h-8 fill-white text-white translate-x-0.5" />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Player Timeline Seek bar */}
@@ -3071,58 +3082,73 @@ export default function App() {
                     {currentTime.toFixed(1)}s / {duration.toFixed(1)}s
                   </span>
                 </div>
-
-                {/* Size and Position Quick Settings */}
-                <div className="pt-2.5 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-400 font-bold">साइज (Size):</span>
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={2.5}
-                        step={0.1}
-                        value={captionScale}
-                        onChange={(e) => setCaptionScale(parseFloat(e.target.value))}
-                        className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                      />
-                      <span className="font-mono text-pink-400 font-black">{Math.round(captionScale * 100)}%</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-400 font-bold">पारदर्शिता (BG Opacity):</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={captionBgOpacity}
-                        onChange={(e) => setCaptionBgOpacity(parseInt(e.target.value))}
-                        className="w-24 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                      />
-                      <span className="font-mono text-emerald-400 font-black">{captionBgOpacity}%</span>
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={() => {
-                      setCaptionX(50);
-                      setCaptionScale(1.0);
-                      setCaptionBgOpacity(90);
-                      if (selectedTemplate === "mrbeast-style") setCaptionY(35);
-                      else if (selectedTemplate === "simple-white") setCaptionY(85);
-                      else if (selectedTemplate === "emotional-story") setCaptionY(80);
-                      else if (selectedTemplate === "reels-trending") setCaptionY(82);
-                      else setCaptionY(75);
-                    }}
-                    className="text-[10px] bg-slate-800 hover:bg-slate-755 border border-slate-700 text-slate-300 py-1.5 px-3 rounded-xl font-bold transition cursor-pointer"
-                  >
-                    Reset Position &amp; Size
-                  </button>
-                </div>
               </div>
             </div>
-          )}
+
+            {/* Separated Caption Control Settings Panel */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3 mt-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-black text-slate-300 border-b border-slate-800/60 pb-2">
+                <Sliders className="w-4 h-4 text-pink-500" />
+                <span>कैप्शन साइज और पारदर्शिता (Caption Size &amp; Opacity)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-400">
+                    <span>साइज (Size):</span>
+                    <span className="font-mono text-pink-400 font-black">{Math.round(captionScale * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2.5}
+                    step={0.1}
+                    value={captionScale}
+                    onChange={(e) => setCaptionScale(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-400">
+                    <span>पारदर्शिता (BG Opacity):</span>
+                    <span className="font-mono text-emerald-400 font-black">{captionBgOpacity}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={captionBgOpacity}
+                    onChange={(e) => setCaptionBgOpacity(parseInt(e.target.value))}
+                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2 text-[10px] border-t border-slate-800/40">
+                <span className="text-slate-500 font-medium">
+                  * वीडियो पर कैप्शन्स को कहीं भी ड्रैग (Drag) कर सकते हैं।
+                </span>
+                <button 
+                  onClick={() => {
+                    setCaptionX(50);
+                    setCaptionScale(1.0);
+                    setCaptionBgOpacity(90);
+                    if (selectedTemplate === "mrbeast-style") setCaptionY(35);
+                    else if (selectedTemplate === "simple-white") setCaptionY(85);
+                    else if (selectedTemplate === "emotional-story") setCaptionY(80);
+                    else if (selectedTemplate === "reels-trending") setCaptionY(82);
+                    else setCaptionY(75);
+                  }}
+                  className="bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-300 py-1.5 px-3 rounded-lg font-bold transition cursor-pointer shrink-0"
+                >
+                  Reset Layout
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
           {/* 3. Transcription Progress Screen */}
           {loadingStep !== "idle" && (
@@ -4091,39 +4117,49 @@ export default function App() {
                   </div>
 
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Export your generated captions separately in standard formats for YouTube, Facebook, and video editors:
+                    Export your generated captions separately in standard subtitle/text formats:
                   </p>
 
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={handleExportSRT}
-                      className="flex flex-col items-center justify-center gap-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 py-2.5 px-2 rounded-xl text-xs font-semibold transition border border-slate-700/50"
+                      className="flex flex-col items-center justify-center gap-1 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 py-2.5 px-2 rounded-xl font-semibold transition border border-slate-700/50"
                       id="btn-export-srt"
                       title="Download standard SubRip Subtitle format (.srt)"
                     >
                       <DownloadIcon className="w-4 h-4 text-pink-400" />
-                      <span>SRT</span>
+                      <span className="text-[10px] font-bold">Subtitles (SRT)</span>
                     </button>
 
                     <button
                       onClick={handleExportTXT}
-                      className="flex flex-col items-center justify-center gap-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 py-2.5 px-2 rounded-xl text-xs font-semibold transition border border-slate-700/50"
+                      className="flex flex-col items-center justify-center gap-1 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 py-2.5 px-2 rounded-xl font-semibold transition border border-slate-700/50"
                       id="btn-export-txt"
                       title="Download clean text transcript with timestamps (.txt)"
                     >
                       <FileText className="w-4 h-4 text-emerald-400" />
-                      <span>TXT</span>
+                      <span className="text-[10px] font-bold">Transcript (TXT)</span>
                     </button>
 
                     <button
                       onClick={handleExportJSON}
-                      className="flex flex-col items-center justify-center gap-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 py-2.5 px-2 rounded-xl text-xs font-semibold transition border border-slate-700/50"
+                      className="flex flex-col items-center justify-center gap-1 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 py-2.5 px-2 rounded-xl font-semibold transition border border-slate-700/50"
                       id="btn-export-json"
                       title="Download JSON structure with captions & high-precision timestamps (.json)"
                     >
                       <span className="text-xs font-bold text-sky-400 font-mono">{"{ }"}</span>
-                      <span>JSON</span>
+                      <span className="text-[10px] font-bold">Data (JSON)</span>
                     </button>
+                  </div>
+
+                  <div className="bg-amber-950/20 border border-amber-500/25 rounded-xl p-3 text-[10px] text-amber-300 space-y-1 mt-1">
+                    <span className="font-extrabold flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                      महत्वपूर्ण सूचना (Important Notice):
+                    </span>
+                    <p className="leading-relaxed">
+                      ये बटन केवल सबटाइटल/टेक्स्ट फ़ाइल डाउनलोड करते हैं। वीडियो डाउनलोड करने के लिए ऊपर दिए गए <strong>"Generate &amp; Download"</strong> बटन का उपयोग करें।
+                    </p>
                   </div>
                 </div>
               </div>
