@@ -66,46 +66,44 @@ export function captionsToJSON(captions: Caption[]): string {
 }
 
 /**
- * Utility to download a text content as a file using a server-side high-compatibility form submission
+ * Utility to download a text content as a file using a robust two-step server-side endpoint.
+ * This completely avoids browser/iframe download blocks and prevents 404/sandboxing errors.
  */
-export function downloadFile(content: string, fileName: string, mimeType: string) {
+export async function downloadFile(content: string, fileName: string, mimeType: string) {
   try {
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = "/api/download-text";
-    form.style.display = "none";
+    const response = await fetch("/api/prepare-text-download", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ content, fileName, mimeType }),
+    });
 
-    const contentInput = document.createElement("input");
-    contentInput.type = "hidden";
-    contentInput.name = "content";
-    contentInput.value = content;
-    form.appendChild(contentInput);
+    if (!response.ok) {
+      throw new Error(`Server returned status: ${response.status}`);
+    }
 
-    const fileNameInput = document.createElement("input");
-    fileNameInput.type = "hidden";
-    fileNameInput.name = "fileName";
-    fileNameInput.value = fileName;
-    form.appendChild(fileNameInput);
-
-    const mimeInput = document.createElement("input");
-    mimeInput.type = "hidden";
-    mimeInput.name = "mimeType";
-    mimeInput.value = mimeType;
-    form.appendChild(mimeInput);
-
-    document.body.appendChild(form);
-    form.submit();
-
-    // Clean up from DOM after a small delay
-    setTimeout(() => {
-      document.body.removeChild(form);
-    }, 200);
+    const data = await response.json();
+    if (data.success && data.downloadUrl) {
+      // Create a temporary hidden link and click it to trigger native GET download.
+      // This is the most compatible way across all Android/iOS/Desktop browsers.
+      const link = document.createElement("a");
+      link.href = data.downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+      }, 200);
+    } else {
+      throw new Error(data.error || "Failed to receive transcode download path.");
+    }
   } catch (err) {
-    console.error("Native form download failed, trying blob fallback:", err);
-    // Blob fallback (in case something unexpected fails)
+    console.error("Server-side prepare download failed, trying standard blob fallback:", err);
+    // Standard blob fallback
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = fileName;
     document.body.appendChild(link);

@@ -1139,19 +1139,86 @@ app.get("/api/download-video", (req, res) => {
   }
 });
 
-// 3.6 API: Download text files (SRT, TXT, JSON) natively via standard POST body (flawless browser downloads)
-app.post("/api/download-text", (req, res) => {
-  const { content, fileName, mimeType } = req.body;
-  if (!content) {
-    return res.status(400).send("File content is empty or missing.");
+// 3.6 API: Prepare text files (SRT, TXT, JSON) for download by saving them in temporary storage
+app.post("/api/prepare-text-download", (req, res) => {
+  try {
+    const { content, fileName, mimeType } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: "File content is empty or missing." });
+    }
+
+    const randomId = Math.random().toString(36).substring(2, 15);
+    const tempFileId = `text_temp_${randomId}.txt`;
+    const tempFilePath = path.join(os.tmpdir(), tempFileId);
+
+    fs.writeFileSync(tempFilePath, content, "utf8");
+
+    console.log(`[TextDownload] Saved temporary text file: ${tempFilePath}`);
+
+    res.json({
+      success: true,
+      downloadUrl: `/api/download-temp-text?id=${tempFileId}&name=${encodeURIComponent(fileName || "caption.srt")}&mime=${encodeURIComponent(mimeType || "text/plain")}`
+    });
+  } catch (err: any) {
+    console.error("[TextDownload] Prepare error:", err);
+    res.status(500).json({ error: "Failed to prepare text download." });
+  }
+});
+
+// 3.7 API: Download prepared text files via simple GET request (extremely reliable for gallery/file-manager)
+app.get("/api/download-temp-text", (req, res) => {
+  const fileId = req.query.id as string;
+  const fileName = req.query.name as string || "caption.srt";
+  const mimeType = req.query.mime as string || "text/plain";
+
+  if (!fileId || typeof fileId !== "string" || fileId.includes("/") || fileId.includes("..") || !fileId.startsWith("text_temp_")) {
+    return res.status(400).send("Invalid file ID.");
   }
 
-  // Clean filename for safety and force standard characters
-  let safeFilename = (fileName || "caption.srt").replace(/[^a-zA-Z0-9_\-\.]/g, "_");
-  
-  res.setHeader("Content-Type", mimeType || "text/plain");
-  res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
-  return res.send(content);
+  const filePath = path.join(os.tmpdir(), fileId);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("Export file has expired or not found. Please click the download button again.");
+  }
+
+  try {
+    const stat = fs.statSync(filePath);
+    
+    // Clean filename for safety (allow dots and standard file characters)
+    let safeFilename = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
+
+    readStream.on("end", () => {
+      console.log(`[TextDownload] Finished streaming file ${fileId} to client.`);
+      // Delete the file immediately after streaming completes to avoid piling up temp files
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[TextDownload] Deleted temporary file ${fileId}`);
+          }
+        } catch (e: any) {
+          console.error("[TextDownload] Error deleting file:", e.message);
+        }
+      }, 5000);
+    });
+
+    readStream.on("error", (streamErr) => {
+      console.error("[TextDownload] Stream error:", streamErr);
+    });
+
+  } catch (err: any) {
+    console.error("[TextDownload] Endpoint error:", err);
+    if (!res.headersSent) {
+      res.status(500).send("Failed to stream file.");
+    }
+  }
 });
 
 function cleanupTempFiles(paths: string[]) {
