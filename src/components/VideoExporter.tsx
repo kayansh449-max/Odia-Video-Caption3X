@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Caption, TemplateId, CustomStyleSettings } from "../types";
 import { drawCaptionOnCanvas, drawCustomCaptionOnCanvas } from "../utils/canvasRenderer";
+import { captionsToSRT, captionsToTXT, downloadFile } from "../utils/captionExporter";
 import { Download, Film, Loader2, Sparkles, Check, AlertCircle, RefreshCw, Layers } from "lucide-react";
 
 interface VideoExporterProps {
@@ -62,6 +63,30 @@ export default function VideoExporter({
       }
     };
   }, []);
+
+  const getCalibratedCaptions = () => {
+    return captions.map(c => ({
+      ...c,
+      start: Math.max(0, parseFloat((c.start - globalTimeOffset).toFixed(3))),
+      end: Math.max(0.1, parseFloat((c.end - globalTimeOffset).toFixed(3))),
+    }));
+  };
+
+  const downloadSRT = () => {
+    if (captions.length === 0) return;
+    const calibrated = getCalibratedCaptions();
+    const srtContent = captionsToSRT(calibrated);
+    const baseName = videoName.trim() ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s]/g, "") : "odia_viral_captions";
+    downloadFile(srtContent, `${baseName}.srt`, "text/srt");
+  };
+
+  const downloadTXT = () => {
+    if (captions.length === 0) return;
+    const calibrated = getCalibratedCaptions();
+    const txtContent = captionsToTXT(calibrated);
+    const baseName = videoName.trim() ? videoName.trim().replace(/[^a-zA-Z0-9_\-\s]/g, "") : "odia_viral_captions";
+    downloadFile(txtContent, `${baseName}.txt`, "text/plain");
+  };
 
   const handleExport = async () => {
     if (!videoUrl || !videoFile) {
@@ -835,21 +860,45 @@ export default function VideoExporter({
 
           {/* Real user-action direct download link to bypass browser iframe restrictions */}
           {exportedVideoUrl && (
-            <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
-              <p className="text-[11px] text-slate-300">
-                अगर वीडियो अपने आप डाउनलोड नहीं हुआ है, तो नीचे दिए गए बटन पर क्लिक करके सीधे गैलरी/स्टोरेज में सेव करें:
-              </p>
-              <a
-                href={exportedVideoUrl}
-                download={exportedVideoFilename}
-                className="w-full text-center bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black py-3 px-5 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer text-sm"
-                id="btn-manual-download"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Download className="w-5 h-5 animate-bounce text-white" />
-                <span>Save Video to Storage (गैलरी में सेव करें)</span>
-              </a>
+            <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-4">
+              <div className="space-y-2">
+                <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  वीडियो डाउनलोड करें (Download Captioned Video):
+                </p>
+                <a
+                  href={exportedVideoUrl}
+                  download={exportedVideoFilename}
+                  className="w-full text-center bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black py-3 px-5 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer text-sm"
+                  id="btn-manual-download"
+                >
+                  <Download className="w-5 h-5 animate-bounce text-white" />
+                  <span>Save Video to Storage (गैलरी में सेव करें)</span>
+                </a>
+              </div>
+
+              <div className="border-t border-slate-800/80 pt-3 space-y-2">
+                <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse"></span>
+                  सबटाइटल फ़ाइलें डाउनलोड करें (Download Subtitles):
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={downloadSRT}
+                    className="flex items-center justify-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/25 text-indigo-200 text-xs font-black py-2.5 px-3 rounded-xl transition-all transform active:scale-95 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Download .SRT</span>
+                  </button>
+                  <button
+                    onClick={downloadTXT}
+                    className="flex items-center justify-center gap-1.5 bg-slate-800/80 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-black py-2.5 px-3 rounded-xl transition-all transform active:scale-95 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Download .TXT</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

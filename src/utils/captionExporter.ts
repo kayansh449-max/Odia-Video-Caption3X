@@ -66,24 +66,53 @@ export function captionsToJSON(captions: Caption[]): string {
 }
 
 /**
- * Utility to download a text content as a file
+ * Utility to download a text content as a file using a server-side high-compatibility form submission
  */
 export function downloadFile(content: string, fileName: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  document.body.appendChild(link);
-  link.click();
-  
-  // Use a short delay before removing the element and revoking the URL.
-  // This is a CRITICAL fix for iframe sandboxes, preventing the browser
-  // from cancelling the download before the event loop can process the click.
-  setTimeout(() => {
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, 150);
+  try {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/api/download-text";
+    form.style.display = "none";
+
+    const contentInput = document.createElement("input");
+    contentInput.type = "hidden";
+    contentInput.name = "content";
+    contentInput.value = content;
+    form.appendChild(contentInput);
+
+    const fileNameInput = document.createElement("input");
+    fileNameInput.type = "hidden";
+    fileNameInput.name = "fileName";
+    fileNameInput.value = fileName;
+    form.appendChild(fileNameInput);
+
+    const mimeInput = document.createElement("input");
+    mimeInput.type = "hidden";
+    mimeInput.name = "mimeType";
+    mimeInput.value = mimeType;
+    form.appendChild(mimeInput);
+
+    document.body.appendChild(form);
+    form.submit();
+
+    // Clean up from DOM after a small delay
+    setTimeout(() => {
+      document.body.removeChild(form);
+    }, 200);
+  } catch (err) {
+    console.error("Native form download failed, trying blob fallback:", err);
+    // Blob fallback (in case something unexpected fails)
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 200);
+  }
 }

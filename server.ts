@@ -1139,6 +1139,21 @@ app.get("/api/download-video", (req, res) => {
   }
 });
 
+// 3.6 API: Download text files (SRT, TXT, JSON) natively via standard POST body (flawless browser downloads)
+app.post("/api/download-text", (req, res) => {
+  const { content, fileName, mimeType } = req.body;
+  if (!content) {
+    return res.status(400).send("File content is empty or missing.");
+  }
+
+  // Clean filename for safety and force standard characters
+  let safeFilename = (fileName || "caption.srt").replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+  
+  res.setHeader("Content-Type", mimeType || "text/plain");
+  res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
+  return res.send(content);
+});
+
 function cleanupTempFiles(paths: string[]) {
   paths.forEach(p => {
     try {
