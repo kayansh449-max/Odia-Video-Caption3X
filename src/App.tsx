@@ -1062,7 +1062,7 @@ export default function App() {
     },
   }[appTheme];
 
-  const [activeWorkspace, setActiveWorkspace] = useState<"caption" | "voice" | null>(null);
+  const [activeWorkspace, setActiveWorkspace] = useState<"caption" | "voice" | null>("caption");
   const standaloneAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Parse and detect unique character prefixes in captions (e.g., "Arjun: ନମସ୍କାର" -> "Arjun")
@@ -4010,61 +4010,6 @@ export default function App() {
                         onChange={(e) => updateCaptionText(index, e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-3 py-2 text-xs md:text-sm text-slate-200 focus:outline-none focus:border-indigo-500 font-medium"
                       />
-
-                      {/* Separate Option: Individual Subtitle Voiceover Toolbar */}
-                      <div className="flex items-center justify-between border-t border-slate-800/50 pt-2.5 mt-1">
-                        <span className="text-[9px] text-slate-500 font-mono font-bold uppercase tracking-wider flex items-center gap-1">
-                          <Volume2 className="w-3 h-3 text-pink-400" /> Segment Voice
-                        </span>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => generateAndPlaySingleCaption(index)}
-                            disabled={loadingSingleIndices[index]}
-                            className={`text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1 cursor-pointer ${
-                              singleCaptionVoiceUrls[index]
-                                ? singlePlayingIndices[index]
-                                  ? "bg-pink-600/20 border-pink-500 text-pink-400"
-                                  : "bg-indigo-600/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/20"
-                                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
-                            }`}
-                          >
-                            {loadingSingleIndices[index] ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-pink-500" />
-                            ) : singleCaptionVoiceUrls[index] ? (
-                              singlePlayingIndices[index] ? (
-                                <>
-                                  <Pause className="w-2.5 h-2.5 fill-pink-400" />
-                                  <span>Pause Voice</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Play className="w-2.5 h-2.5 fill-indigo-400" />
-                                  <span>Play Voice</span>
-                                </>
-                              )
-                            ) : (
-                              <>
-                                <Sparkles className="w-2.5 h-2.5 text-yellow-300 animate-pulse" />
-                                <span>Generate AI Voice</span>
-                              </>
-                            )}
-                          </button>
-
-                          {singleCaptionVoiceUrls[index] && (
-                            <button
-                              type="button"
-                              onClick={() => downloadSingleCaptionWav(index)}
-                              className="text-[10px] font-bold px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 transition flex items-center gap-1 cursor-pointer"
-                              title="Download single voice segment as WAV"
-                            >
-                              <DownloadIcon className="w-3 h-3 text-slate-400" />
-                              <span>WAV</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   );
                 })

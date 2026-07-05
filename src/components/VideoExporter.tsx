@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Caption, TemplateId, CustomStyleSettings } from "../types";
 import { drawCaptionOnCanvas, drawCustomCaptionOnCanvas } from "../utils/canvasRenderer";
 import { captionsToSRT, captionsToTXT, downloadFile } from "../utils/captionExporter";
-import { Download, Film, Loader2, Sparkles, Check, AlertCircle, RefreshCw, Layers } from "lucide-react";
+import { Download, Film, Loader2, Sparkles, Check, AlertCircle, RefreshCw, Layers, Copy } from "lucide-react";
 
 interface VideoExporterProps {
   videoFile: File | null;
@@ -41,6 +41,47 @@ export default function VideoExporter({
   const [exportedVideoUrl, setExportedVideoUrl] = useState<string | null>(null);
   const [exportedVideoFilename, setExportedVideoFilename] = useState<string>("");
   const [videoName, setVideoName] = useState<string>("");
+
+  const [copiedSRT, setCopiedSRT] = useState(false);
+  const [copiedTXT, setCopiedTXT] = useState(false);
+  const [copiedVideoUrl, setCopiedVideoUrl] = useState(false);
+
+  const copyVideoUrlToClipboard = () => {
+    if (!exportedVideoUrl) return;
+    const absoluteUrl = exportedVideoUrl.startsWith("http")
+      ? exportedVideoUrl
+      : window.location.origin + exportedVideoUrl;
+    navigator.clipboard.writeText(absoluteUrl).then(() => {
+      setCopiedVideoUrl(true);
+      setTimeout(() => setCopiedVideoUrl(false), 2005);
+    }).catch(err => {
+      console.error("Failed to copy video URL: ", err);
+    });
+  };
+
+  const copySRTToClipboard = () => {
+    if (captions.length === 0) return;
+    const calibrated = getCalibratedCaptions();
+    const srtContent = captionsToSRT(calibrated);
+    navigator.clipboard.writeText(srtContent).then(() => {
+      setCopiedSRT(true);
+      setTimeout(() => setCopiedSRT(false), 2005);
+    }).catch(err => {
+      console.error("Failed to copy SRT: ", err);
+    });
+  };
+
+  const copyTXTToClipboard = () => {
+    if (captions.length === 0) return;
+    const calibrated = getCalibratedCaptions();
+    const txtContent = captionsToTXT(calibrated);
+    navigator.clipboard.writeText(txtContent).then(() => {
+      setCopiedTXT(true);
+      setTimeout(() => setCopiedTXT(false), 2005);
+    }).catch(err => {
+      console.error("Failed to copy TXT: ", err);
+    });
+  };
 
   // Export Settings (Speed is locked to 1.0x to preserve length, timings, and vocal tone)
   const [resolution, setResolution] = useState<"original" | "1080p" | "2k" | "4k">("original");
@@ -861,26 +902,67 @@ export default function VideoExporter({
           {/* Real user-action direct download link to bypass browser iframe restrictions */}
           {exportedVideoUrl && (
             <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-4">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                   वीडियो डाउनलोड करें (Download Captioned Video):
                 </p>
+                
+                {/* 1. Primary Direct Download Button (Force absolute URL & Target _blank for maximum Webview/Android support) */}
                 <a
-                  href={exportedVideoUrl}
+                  href={exportedVideoUrl.startsWith("http") ? exportedVideoUrl : window.location.origin + exportedVideoUrl}
                   download={exportedVideoFilename}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="w-full text-center bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black py-3 px-5 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer text-sm"
                   id="btn-manual-download"
                 >
                   <Download className="w-5 h-5 animate-bounce text-white" />
                   <span>Save Video to Storage (गैलरी में सेव करें)</span>
                 </a>
+
+                {/* 2. Webview / Android Backup Button: Copy direct video download link */}
+                <button
+                  type="button"
+                  onClick={copyVideoUrlToClipboard}
+                  className={`w-full flex items-center justify-center gap-1.5 border text-xs font-bold py-2.5 px-4 rounded-xl transition-all transform active:scale-95 cursor-pointer ${
+                    copiedVideoUrl 
+                      ? "bg-emerald-500/20 border-emerald-500 text-emerald-300" 
+                      : "bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
+                  }`}
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>{copiedVideoUrl ? "✓ Video Link Copied! (लिंक कॉपी हो गया)" : "Copy Direct Video Link (लिंक कॉपी करें)"}</span>
+                </button>
+
+                {copiedVideoUrl && (
+                  <p className="text-[10px] text-emerald-400 font-medium text-center">
+                    💡 Link copy ho gaya hai! Isse Chrome browser me open karke direct download kar sakte hain!
+                  </p>
+                )}
+
+                {/* 3. HTML5 Video Player: The absolute ultimate fallback for Mobile Webviews */}
+                <div className="border-t border-slate-800/80 pt-3 space-y-2">
+                  <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                    वीडियो प्ले करें / लॉन्ग-प्रेस करके सेव करें (Direct Video Backup):
+                  </p>
+                  <video
+                    src={exportedVideoUrl.startsWith("http") ? exportedVideoUrl : window.location.origin + exportedVideoUrl}
+                    controls
+                    playsInline
+                    className="w-full rounded-xl border border-slate-800 shadow-md bg-black max-h-[300px]"
+                  />
+                  <p className="text-[9px] text-slate-400 font-medium leading-normal italic text-center">
+                    ℹ️ Mobile Chrome standard features: click 3 dots on video to Download, or long press video to save.
+                  </p>
+                </div>
               </div>
 
-              <div className="border-t border-slate-800/80 pt-3 space-y-2">
+              <div className="border-t border-slate-800/80 pt-3 space-y-3">
                 <p className="text-[11px] text-slate-300 font-bold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse"></span>
-                  सबटाइटल फ़ाइलें डाउनलोड करें (Download Subtitles):
+                  सबटाइटल फ़ाइलें डाउनलोड / कॉपी करें (Download & Copy Subtitles):
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -898,6 +980,37 @@ export default function VideoExporter({
                     <span>Download .TXT</span>
                   </button>
                 </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={copySRTToClipboard}
+                    className={`flex items-center justify-center gap-1.5 border text-[11px] font-bold py-2.5 px-3 rounded-xl transition-all transform active:scale-95 cursor-pointer ${
+                      copiedSRT 
+                        ? "bg-emerald-500/20 border-emerald-500 text-emerald-300" 
+                        : "bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedSRT ? "SRT Copied! (कॉपी हो गया)" : "Copy SRT (कॉपी करें)"}</span>
+                  </button>
+                  <button
+                    onClick={copyTXTToClipboard}
+                    className={`flex items-center justify-center gap-1.5 border text-[11px] font-bold py-2.5 px-3 rounded-xl transition-all transform active:scale-95 cursor-pointer ${
+                      copiedTXT 
+                        ? "bg-emerald-500/20 border-emerald-500 text-emerald-300" 
+                        : "bg-slate-950 hover:bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
+                    }`}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedTXT ? "TXT Copied! (कॉपी हो गया)" : "Copy TXT (कॉपी करें)"}</span>
+                  </button>
+                </div>
+
+                {copiedSRT && (
+                  <p className="text-[10px] text-emerald-400 font-bold text-center animate-pulse">
+                    ✓ SRT timeline is copied! (क्लिपबोर्ड में कॉपी हो गया है!)
+                  </p>
+                )}
               </div>
             </div>
           )}

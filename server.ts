@@ -1080,7 +1080,7 @@ app.post("/api/transcode", async (req, res) => {
   }
 });
 
-// 3.5 API: Download transcoded MP4 natively via simple HTTP stream (flawless mobile/gallery compatibility)
+// 3.5 API: Download transcoded MP4 natively via Express res.download (full Range/HTTP resume support)
 app.get("/api/download-video", (req, res) => {
   const fileId = req.query.id as string;
   const fileName = req.query.name as string || "video.mp4";
@@ -1096,45 +1096,25 @@ app.get("/api/download-video", (req, res) => {
   }
 
   try {
-    const stat = fs.statSync(filePath);
-    
     // Clean filename for Content-Disposition (safe characters only)
     let safeFilename = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
     if (!safeFilename.toLowerCase().endsWith(".mp4")) {
       safeFilename += ".mp4";
     }
 
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Length", stat.size);
-    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
-
-    const readStream = fs.createReadStream(filePath);
-    readStream.pipe(res);
-
-    readStream.on("end", () => {
-      console.log(`[Download] Finished streaming file ${fileId} to client.`);
-      // Clean up the MP4 from temporary storage 15 seconds after download finishes, 
-      // giving the system plenty of buffer time.
-      setTimeout(() => {
-        try {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            console.log(`[Cleanup] Deleted temporary download file ${fileId}`);
-          }
-        } catch (e: any) {
-          console.error("[Cleanup] Error deleting downloaded file:", e.message);
-        }
-      }, 15000);
-    });
-
-    readStream.on("error", (streamErr) => {
-      console.error("[Download] Stream error:", streamErr);
+    console.log(`[Download] Starting Express native download for ${fileId} as "${safeFilename}"`);
+    res.download(filePath, safeFilename, (err) => {
+      if (err) {
+        console.error(`[Download] Error during download of ${fileId}:`, err.message);
+      } else {
+        console.log(`[Download] Finished streaming file ${fileId} to client.`);
+      }
     });
 
   } catch (err: any) {
     console.error("[Download] Endpoint error:", err);
     if (!res.headersSent) {
-      res.status(500).send("Failed to stream video file.");
+      res.status(500).send("Failed to download video file.");
     }
   }
 });
@@ -1182,35 +1162,16 @@ app.get("/api/download-temp-text", (req, res) => {
   }
 
   try {
-    const stat = fs.statSync(filePath);
-    
     // Clean filename for safety (allow dots and standard file characters)
     let safeFilename = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
 
-    res.setHeader("Content-Type", mimeType);
-    res.setHeader("Content-Length", stat.size);
-    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
-
-    const readStream = fs.createReadStream(filePath);
-    readStream.pipe(res);
-
-    readStream.on("end", () => {
-      console.log(`[TextDownload] Finished streaming file ${fileId} to client.`);
-      // Delete the file immediately after streaming completes to avoid piling up temp files
-      setTimeout(() => {
-        try {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            console.log(`[TextDownload] Deleted temporary file ${fileId}`);
-          }
-        } catch (e: any) {
-          console.error("[TextDownload] Error deleting file:", e.message);
-        }
-      }, 5000);
-    });
-
-    readStream.on("error", (streamErr) => {
-      console.error("[TextDownload] Stream error:", streamErr);
+    console.log(`[TextDownload] Starting Express native download for ${fileId} as "${safeFilename}"`);
+    res.download(filePath, safeFilename, (err) => {
+      if (err) {
+        console.error(`[TextDownload] Error during download of ${fileId}:`, err.message);
+      } else {
+        console.log(`[TextDownload] Finished streaming file ${fileId} to client.`);
+      }
     });
 
   } catch (err: any) {
@@ -1220,6 +1181,39 @@ app.get("/api/download-temp-text", (req, res) => {
     }
   }
 });
+
+// 3.8 Background Process: Periodically clean up old temporary and transcoded files
+setInterval(() => {
+  try {
+    const tmpDir = os.tmpdir();
+    fs.readdir(tmpDir, (err, files) => {
+      if (err) return;
+      const now = Date.now();
+      const maxAge = 15 * 60 * 1000; // Keep files for 15 minutes before deleting
+      files.forEach(file => {
+        if (
+          file.startsWith("input_") ||
+          file.startsWith("output_") ||
+          file.startsWith("text_temp_")
+        ) {
+          const filePath = path.join(tmpDir, file);
+          fs.stat(filePath, (statErr, stats) => {
+            if (statErr) return;
+            if (now - stats.mtimeMs > maxAge) {
+              fs.unlink(filePath, (unlinkErr) => {
+                if (!unlinkErr) {
+                  console.log(`[PeriodicCleanup] Safely deleted expired file: ${file}`);
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+  } catch (e: any) {
+    console.error("[PeriodicCleanup] Error in background loop:", e.message);
+  }
+}, 5 * 60 * 1000); // Runs every 5 minutes
 
 function cleanupTempFiles(paths: string[]) {
   paths.forEach(p => {
