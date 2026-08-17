@@ -27,17 +27,30 @@ app.use((req, res, next) => {
   next();
 });
 
+// Helper to clean and sanitize API keys (removes wrapping quotes, whitespaces, falsy values)
+function cleanApiKey(rawKey?: string): string {
+  if (!rawKey || typeof rawKey !== "string") return "";
+  let key = rawKey.trim();
+  while ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1).trim();
+  }
+  if (key === "undefined" || key === "null" || key === "MY_GEMINI_API_KEY" || key === "") {
+    return "";
+  }
+  return key;
+}
+
 // Initializer for Gemini Client
 function getGeminiClient(customApiKey?: string): GoogleGenAI {
-  let apiKey = customApiKey;
-  if (!apiKey || apiKey === "undefined" || apiKey === "null" || apiKey.trim() === "") {
-    apiKey = process.env.GEMINI_API_KEY;
+  let apiKey = cleanApiKey(customApiKey);
+  if (!apiKey) {
+    apiKey = cleanApiKey(process.env.GEMINI_API_KEY);
   }
-  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "undefined" || apiKey === "null" || apiKey.trim() === "") {
+  if (!apiKey) {
     throw new Error("GEMINI_API_KEY_MISSING");
   }
   return new GoogleGenAI({
-    apiKey: apiKey.trim(),
+    apiKey: apiKey,
     httpOptions: {
       headers: {
         "User-Agent": "aistudio-build",
@@ -125,7 +138,7 @@ Instructions:
 
         // Multi-model backup cascade for absolute stability
         let geminiResponse = null;
-        const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
+        const modelsToTry = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
 
         // Cascade Stage 1: Try with Structured JSON Schema
         for (const model of modelsToTry) {
@@ -260,41 +273,50 @@ app.post("/api/test-key", async (req, res) => {
   try {
     const { apiKey: bodyApiKey } = req.body;
     const headerApiKey = req.headers["x-gemini-api-key"] as string;
-    const clientApiKey = bodyApiKey || headerApiKey;
+    const clientApiKey = cleanApiKey(bodyApiKey || headerApiKey);
 
     if (!clientApiKey) {
-      return res.status(400).json({ success: false, error: "No API Key provided." });
+      return res.status(400).json({ success: false, error: "No API Key provided. (कृपया एपीआई की दर्ज करें।)" });
     }
 
-    try {
-      const ai = getGeminiClient(clientApiKey);
-      
-      // Quick test prompt (asking for a simple message)
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: "Say 'Hello, API Key is working perfectly!' in Odia script and English script in one line."
-      });
+    const testModels = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+    let lastErr = null;
 
-      return res.json({
-        success: true,
-        message: response.text || "Connected successfully!",
-      });
-    } catch (testError: any) {
-      console.warn("Test API key with gemini-3.5-flash failed, trying gemini-3.1-flash-lite fallback:", testError.message);
-      // Fallback to gemini-3.1-flash-lite for testing
-      const ai = getGeminiClient(clientApiKey);
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: "Say 'Hello, API Key is working perfectly!' in Odia script and English script in one line."
-      });
+    for (const model of testModels) {
+      try {
+        const ai = getGeminiClient(clientApiKey);
+        const response = await ai.models.generateContent({
+          model: model,
+          contents: "Say 'Hello, API Key is working perfectly!' in Odia script and English in one short sentence."
+        });
 
-      return res.json({
-        success: true,
-        message: response.text || "Connected successfully with 3.1-flash-lite!",
-      });
+        if (response && response.text) {
+          return res.json({
+            success: true,
+            message: response.text.trim() || "Connected successfully!",
+            model: model
+          });
+        }
+      } catch (err: any) {
+        console.warn(`[Test-Key] Failed on model ${model}:`, err.message || err);
+        lastErr = err;
+      }
     }
+
+    const errMsg = lastErr?.message || "Failed to verify API Key.";
+    let userHelp = errMsg;
+    if (errMsg.toLowerCase().includes("api_key_invalid") || errMsg.toLowerCase().includes("permission_denied") || errMsg.toLowerCase().includes("invalid")) {
+      userHelp = "Invalid API Key. Please verify you copied the entire key from Google AI Studio. (अमान्य एपीआई की। कृपया Google AI Studio से पूरी की कॉपी करें।)";
+    } else if (errMsg.toLowerCase().includes("quota") || errMsg.toLowerCase().includes("resource_exhausted") || errMsg.includes("429")) {
+      userHelp = "Rate limit or Quota exceeded on this API key. (इस एपीआई की पर कोटा समाप्त हो गया है।)";
+    }
+
+    return res.status(400).json({
+      success: false,
+      error: userHelp
+    });
   } catch (error: any) {
-    console.error("API Key check failed:", error);
+    console.error("API Key check error:", error);
     return res.status(500).json({
       success: false,
       error: error.message || "Failed to verify API Key.",
@@ -567,7 +589,7 @@ Instructions:
     let chunkResponse = null;
     try {
       chunkResponse = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.7-flash",
         contents: [audioPart, promptPart],
         config: {
           responseMimeType: "application/json",
@@ -587,15 +609,25 @@ Instructions:
         }
       });
     } catch (err: any) {
-      console.warn(`[STT] Chunk ${idx} structured generation failed, trying backup Lite model:`, err.message || err);
-      // Fallback to 3.1-flash-lite if 3.5-flash is throttled
-      chunkResponse = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
-        contents: [audioPart, promptPart],
-        config: {
-          responseMimeType: "application/json"
-        }
-      });
+      console.warn(`[STT] Chunk ${idx} structured generation failed on 3.7-flash, trying backup 3.1-flash-lite model:`, err.message || err);
+      try {
+        chunkResponse = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: [audioPart, promptPart],
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+      } catch (liteErr: any) {
+        console.warn(`[STT] Chunk ${idx} lite model failed, trying flash-latest fallback:`, liteErr.message || liteErr);
+        chunkResponse = await ai.models.generateContent({
+          model: "gemini-flash-latest",
+          contents: [audioPart, promptPart],
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+      }
     }
 
     const textResult = chunkResponse?.text;

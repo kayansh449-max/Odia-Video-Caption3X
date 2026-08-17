@@ -229,7 +229,7 @@ Instructions:
 5. Ensure absolutely no overlapping segments (i.e. segment N's 'end' must be less than or equal to segment N+1's 'start').
 6. Return the result strictly conforming to the JSON Schema.`;
 
-  const models = ["gemini-1.5-flash", "gemini-2.5-flash"];
+  const models = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
   let lastError = null;
 
   for (const model of models) {
@@ -343,7 +343,7 @@ async function synthesizeSpeechClientSide(
     const promptPart = `${voiceConf.promptCue}\n${langPronunciation}\nIMPORTANT: Strictly capture and output the tone/emotion of ${currentStyle} exactly with appropriate emotional pauses and vocal inflections.`;
 
     try {
-      const model = "gemini-2.5-flash";
+      const model = "gemini-3.1-flash-tts-preview";
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
       const response = await fetch(url, {
@@ -1449,7 +1449,11 @@ export default function App() {
   const [testMessage, setTestMessage] = useState<string>("");
 
   const testApiKey = async () => {
-    const trimmedKey = apiKey.trim();
+    let trimmedKey = apiKey.trim();
+    while ((trimmedKey.startsWith('"') && trimmedKey.endsWith('"')) || (trimmedKey.startsWith("'") && trimmedKey.endsWith("'"))) {
+      trimmedKey = trimmedKey.slice(1, -1).trim();
+    }
+
     if (!trimmedKey) {
       setTestStatus("error");
       setTestMessage("Please enter an API Key first. (कृपया पहले एक एपीआई की डालें।)");
@@ -1457,47 +1461,78 @@ export default function App() {
     }
     setTestStatus("testing");
     setTestMessage("");
+
     try {
-      // Direct client-side verification to Google Gemini API
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${trimmedKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: "Hello, reply with YES" }] }]
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.candidates && data.candidates.length > 0) {
+      // 1. First, verify via server-side /api/test-key endpoint
+      try {
+        const backendResponse = await fetch(resolveApiUrl("/api/test-key"), {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "x-gemini-api-key": trimmedKey
+          },
+          body: JSON.stringify({ apiKey: trimmedKey })
+        });
+        const data = await backendResponse.json();
+        if (backendResponse.ok && data.success) {
           setTestStatus("success");
-          setTestMessage("✓ Key Connected Successfully! (एपीआई की सफलतापूर्वक जुड़ गई है!)");
+          setTestMessage(data.message || "✓ Key Connected Successfully! (सफलतापूर्वक जुड़ गया है!)");
           setApiKey(trimmedKey);
           localStorage.setItem("user_gemini_api_key", trimmedKey);
           setIsSimulated(false);
           setApiErrorDetail("");
           return;
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      } catch (backendErr: any) {
+        console.warn("Backend key test attempt error:", backendErr.message || backendErr);
+        // If backend failed due to network/APK proxy, try direct REST verification
+      }
+
+      // 2. Direct client-side verification to Google Gemini API (fallback for standalone APKs)
+      const directModels = ["gemini-2.5-flash", "gemini-3.7-flash", "gemini-3.1-flash-lite"];
+      let directSuccess = false;
+
+      for (const model of directModels) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${trimmedKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Respond 'OK'" }] }]
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.candidates && data.candidates.length > 0) {
+              directSuccess = true;
+              break;
+            }
+          } else {
+            const errBody = await response.text();
+            if (errBody.includes("API_KEY_INVALID") || response.status === 400 || response.status === 403) {
+              throw new Error("Invalid API Key. Please verify you copied the full key from Google AI Studio. (अमान्य एपीआई की।)");
+            }
+          }
+        } catch (modelErr: any) {
+          if (modelErr.message.includes("Invalid API Key")) {
+            throw modelErr;
+          }
         }
       }
 
-      // If direct call fails (e.g. CORS, but Gemini REST API allows CORS), fallback to backend
-      console.warn("Direct verification unsuccessful or returned non-ok status, trying backend verification fallback...");
-      const backendResponse = await fetch(resolveApiUrl("/api/test-key"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: trimmedKey })
-      });
-      const data = await backendResponse.json();
-      if (backendResponse.ok && data.success) {
+      if (directSuccess) {
         setTestStatus("success");
-        setTestMessage(data.message || "Connected successfully! (सफलतापूर्वक जुड़ गया है!)");
+        setTestMessage("✓ Key Connected Successfully! (एपीआई की सफलतापूर्वक जुड़ गई है!)");
         setApiKey(trimmedKey);
         localStorage.setItem("user_gemini_api_key", trimmedKey);
         setIsSimulated(false);
         setApiErrorDetail("");
       } else {
         setTestStatus("error");
-        setTestMessage(data.error || "Verification failed. Please check your key. (सत्यापन विफल।)");
+        setTestMessage("Failed to verify API Key. Please check the key from Google AI Studio. (सत्यापन विफल।)");
       }
     } catch (err: any) {
       setTestStatus("error");
